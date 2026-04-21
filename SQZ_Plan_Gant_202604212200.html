@@ -1,0 +1,2858 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AP-AXO — Plan Multi-Proyecto</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a18;display:flex;min-height:100vh;overflow:hidden;}
+
+/* ── Sidebar ── */
+#sidebar{width:220px;flex-shrink:0;background:#1a1a18;display:flex;flex-direction:column;height:100vh;overflow:hidden;transition:width 0.2s;position:relative;z-index:10;}
+#sidebar.collapsed{width:48px;}
+.sb-header{padding:14px 14px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:0.5px solid #2c2c2a;}
+.sb-logo{font-size:13px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;}
+.sb-logo span{color:#378ADD;}
+.sb-toggle{background:none;border:none;color:#888780;cursor:pointer;font-size:14px;flex-shrink:0;padding:2px;}
+.sb-toggle:hover{color:#fff;}
+.sb-section{padding:8px 0;}
+.sb-section-label{font-size:10px;font-weight:600;color:#5f5e5a;letter-spacing:0.08em;padding:0 14px 5px;white-space:nowrap;overflow:hidden;}
+.sb-proj-list{display:flex;flex-direction:column;gap:1px;padding:0 8px;flex:1;overflow-y:auto;}
+.sb-proj{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;transition:background 0.12s;position:relative;}
+.sb-proj:hover{background:#2c2c2a;}
+.sb-proj.active{background:#2c2c2a;}
+.sb-proj-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.sb-proj-name{font-size:12px;color:#c8c7c3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
+.sb-proj.active .sb-proj-name{color:#fff;font-weight:500;}
+.sb-proj-tasks{font-size:10px;color:#5f5e5a;white-space:nowrap;}
+.sb-add-proj{display:flex;align-items:center;gap:7px;padding:7px 8px;border-radius:6px;cursor:pointer;color:#5f5e5a;font-size:12px;transition:all 0.12s;margin:4px 8px;}
+.sb-add-proj:hover{background:#2c2c2a;color:#c8c7c3;}
+.sb-bottom{padding:10px 8px;border-top:0.5px solid #2c2c2a;display:flex;flex-direction:column;gap:4px;}
+.sb-bottom-btn{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;color:#5f5e5a;font-size:12px;transition:all 0.12s;}
+.sb-bottom-btn:hover{background:#2c2c2a;color:#c8c7c3;}
+.sb-devs-link{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;color:#5f5e5a;font-size:12px;transition:all 0.12s;}
+.sb-devs-link:hover{background:#2c2c2a;color:#c8c7c3;}
+.sb-devs-link.active{background:#2c2c2a;color:#fff;}
+.sb-collapsed-hide{transition:opacity 0.1s;}
+#sidebar.collapsed .sb-collapsed-hide{opacity:0;pointer-events:none;width:0;overflow:hidden;}
+#sidebar.collapsed .sb-proj-name,#sidebar.collapsed .sb-proj-tasks,#sidebar.collapsed .sb-section-label,#sidebar.collapsed .sb-add-proj span,#sidebar.collapsed .sb-bottom-btn span,#sidebar.collapsed .sb-devs-link span{display:none;}
+#sidebar.collapsed .sb-logo{display:none;}
+
+/* ── Main area ── */
+#main-wrap{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0;}
+header{background:#fff;border-bottom:0.5px solid #d3d1c7;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-shrink:0;}
+.header-left{display:flex;align-items:center;gap:10px;min-width:0;}
+.header-proj-name{font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.header-proj-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.save-indicator{font-size:11px;padding:3px 10px;border-radius:10px;font-weight:500;transition:all 0.3s;white-space:nowrap;}
+.save-indicator.saved{background:#EAF3DE;color:#27500A;}
+.save-indicator.saving{background:#E6F1FB;color:#0C447C;}
+.save-indicator.unsaved{background:#FAEEDA;color:#633806;}
+.header-actions{display:flex;gap:6px;align-items:center;flex-shrink:0;}
+.hbtn{font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;font-weight:500;white-space:nowrap;}
+.hbtn:hover{background:#f1efe8;}
+.hbtn.primary{background:#1a1a18;color:#fff;border-color:#1a1a18;}
+.hbtn.primary:hover{background:#2c2c2a;}
+.hbtn.danger{border-color:#f09595;color:#a32d2d;}
+.hbtn.danger:hover{background:#fcebeb;}
+.hbtn:disabled{opacity:0.5;cursor:not-allowed;}
+
+#content-area{flex:1;overflow-y:auto;padding:16px 20px;}
+
+/* ── Panels ── */
+.panel{background:#fff;border:0.5px solid #d3d1c7;border-radius:10px;padding:14px 18px;margin-bottom:1.1rem;}
+.panel-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;gap:8px;}
+.panel-title{font-size:12px;font-weight:500;color:#5f5e5a;display:flex;align-items:center;gap:8px;}
+.panel-body{overflow:hidden;transition:max-height 0.3s ease,opacity 0.25s ease;opacity:1;}
+.panel-body.collapsed{max-height:0!important;opacity:0;pointer-events:none;}
+.collapse-btn{font-size:11px;padding:2px 8px;border-radius:5px;border:0.5px solid #d3d1c7;background:#f5f5f3;color:#5f5e5a;cursor:pointer;white-space:nowrap;}
+.collapse-btn:hover{background:#e8e6df;}
+
+/* ── Controls ── */
+.controls{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem;align-items:center;background:#fff;padding:10px 14px;border-radius:10px;border:0.5px solid #d3d1c7;}
+.controls label{font-size:13px;color:#5f5e5a;display:flex;align-items:center;gap:6px;}
+.controls input[type=date],.controls input[type=number]{font-size:13px;padding:4px 8px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;}
+
+/* ── Dev manager ── */
+.dev-row{display:flex;align-items:center;gap:7px;margin-bottom:6px;flex-wrap:wrap;}
+.dev-color-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.dev-name-input{font-size:12px;padding:4px 8px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;width:130px;}
+.dev-add-btn,.dev-del-btn{font-size:11px;padding:3px 9px;border-radius:6px;cursor:pointer;border:0.5px solid #b4b2a9;background:#f1efe8;color:#5f5e5a;}
+.dev-del-btn:hover{background:#fcebeb;color:#a32d2d;border-color:#f09595;}
+
+/* Availability slider */
+.avail-wrap{display:flex;align-items:center;gap:6px;}
+.avail-slider{-webkit-appearance:none;appearance:none;width:80px;height:4px;border-radius:2px;background:#d3d1c7;outline:none;cursor:pointer;}
+.avail-slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#378ADD;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);}
+.avail-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#378ADD;cursor:pointer;border:2px solid #fff;}
+.avail-num{font-size:12px;font-weight:500;min-width:36px;text-align:right;}
+.avail-total{font-size:11px;padding:2px 8px;border-radius:8px;font-weight:500;margin-left:4px;}
+.avail-total.ok{background:#eaf3de;color:#27500a;}
+.avail-total.warn{background:#faeeda;color:#633806;}
+.avail-total.error{background:#fcebeb;color:#791f1f;}
+
+/* Global dev badge */
+.global-badge{font-size:10px;padding:1px 6px;border-radius:8px;background:#e6f1fb;color:#0c447c;font-weight:500;white-space:nowrap;}
+.local-badge{font-size:10px;padding:1px 6px;border-radius:8px;background:#f1efe8;color:#5f5e5a;font-weight:500;white-space:nowrap;}
+
+/* ── Summary ── */
+.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1.1rem;}
+.sc{background:#fff;border-radius:8px;padding:9px 13px;min-width:100px;border:0.5px solid #d3d1c7;}
+.sc-label{font-size:11px;color:#5f5e5a;margin-bottom:2px;}
+.sc-val{font-size:17px;font-weight:500;color:#1a1a18;}
+.sc-sub{font-size:11px;color:#888780;}
+.dev-status{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1rem;}
+.dev-card{border-radius:8px;padding:8px 13px;border:0.5px solid #d3d1c7;background:#fff;min-width:130px;}
+.dc-name{font-size:12px;font-weight:500;margin-bottom:3px;}
+.dc-status{font-size:11px;}
+.dc-next{font-size:11px;color:#888780;margin-top:2px;}
+.dc-avail{font-size:11px;color:#888780;margin-top:1px;}
+
+/* ── Warnings ── */
+.warnings{margin-bottom:1rem;display:flex;flex-direction:column;gap:5px;}
+.warn-box{font-size:12px;padding:6px 11px;border-radius:8px;border-left:3px solid;display:flex;gap:7px;}
+.warn-box.danger{background:#fcebeb;border-color:#e24b4a;color:#791f1f;}
+.warn-box.warning{background:#faeeda;border-color:#ba7517;color:#633806;}
+.warn-box.info{background:#e6f1fb;border-color:#378add;color:#0c447c;}
+.warn-box.success{background:#eaf3de;border-color:#639922;color:#27500a;}
+
+/* ── Legend ── */
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:.75rem;font-size:12px;color:#5f5e5a;align-items:center;}
+.legend-dot{width:10px;height:10px;border-radius:2px;}
+.legend-item{display:flex;align-items:center;gap:5px;}
+
+/* ── Gantt table ── */
+.left-scroll-wrap{overflow-x:auto;border:0.5px solid #d3d1c7;border-radius:10px;background:#fff;}
+.gantt-table-split{border-collapse:collapse;font-size:12px;width:max-content;}
+.gantt-table-split th,.gantt-table-split td{padding:3px 6px;border-right:0.5px solid #d3d1c7;border-bottom:0.5px solid #d3d1c7;vertical-align:middle;white-space:nowrap;}
+.gantt-table-split th{background:#f1efe8;color:#5f5e5a;font-weight:500;font-size:11px;}
+.gantt-table-split tr:nth-child(even) td{background:#fafaf8;}
+.gantt-table-split .total-row td{font-weight:500;background:#f1efe8!important;}
+.gantt-table-split .add-row td{background:#fff!important;border-top:1.5px dashed #b4b2a9;}
+.gantt-table-split tr.row-completado td{opacity:.55;}
+.gantt-table-split td.sk,.gantt-table-split th.sk{position:sticky;z-index:2;background:#fff;box-shadow:1px 0 0 #d3d1c7;}
+.gantt-table-split th.sk{background:#f1efe8;z-index:3;}
+.gantt-table-split tr:nth-child(even) td.sk{background:#fafaf8;}
+.gantt-table-split .total-row td.sk{background:#f1efe8!important;}
+.gantt-table-split .add-row td.sk{background:#fff!important;}
+.gantt-table-split tr.row-completado td.sk{opacity:.55;}
+.gantt-table-split th.sk-last,.gantt-table-split td.sk-last{position:sticky;z-index:2;background:#fff;box-shadow:3px 0 6px -1px rgba(0,0,0,0.12);}
+.gantt-table-split th.sk-last{background:#f1efe8;z-index:3;}
+.gantt-table-split tr:nth-child(even) td.sk-last{background:#fafaf8;}
+.gantt-table-split .total-row td.sk-last{background:#f1efe8!important;}
+.gantt-table-split .add-row td.sk-last{background:#fff!important;}
+.cal-header{border-collapse:collapse;font-size:11px;}
+.cal-month{background:#f1efe8;color:#5f5e5a;font-weight:500;text-align:center;padding:3px 4px;white-space:nowrap;overflow:hidden;}
+.cal-day{text-align:center;padding:2px 0;color:#b4b2a9;font-size:10px;min-width:14px;}
+.cal-day.today-col{color:#e24b4a;font-weight:700;background:#fcebeb;border-bottom:2px solid #e24b4a !important;}
+.cal-day.holiday-col{color:#ba7517;background:#faeeda;}
+.cal-day.weekend-col{background:#f5f5f3;opacity:.6;}
+.bar-area{position:relative;height:22px;}
+.bar-inner{position:absolute;top:2px;height:18px;border-radius:3px;display:flex;align-items:center;padding:0 5px;font-size:9px;font-weight:500;overflow:hidden;white-space:nowrap;}
+.gantt-bar{z-index:1;position:absolute;top:4px;height:20px;border-radius:3px;overflow:hidden;box-sizing:border-box;visibility:hidden;border-left:4px solid var(--dev-color,#888780);border:1px solid rgba(0,0,0,0.15);}
+.gantt-bar-track{position:absolute;inset:0;border-radius:3px;overflow:hidden;box-sizing:border-box;}
+.gantt-seg{position:absolute;top:0;bottom:0;box-sizing:border-box;}
+.gantt-delay-seg{z-index:1;border-right:1px solid rgba(255,255,255,0.55);}
+.gantt-dev-seg{z-index:1;background:#378ADD;}
+.gantt-test-seg{z-index:1;background:#7F77DD;}
+.gantt-gar-seg{z-index:1;background:#1D9E75;}
+.gantt-bar-label{position:absolute;left:6px;top:50%;transform:translateY(-50%);z-index:3;font-size:9px;font-weight:700;color:#fff;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,0.35);pointer-events:none;}
+input.ce{font-size:11px;padding:2px 5px;border-radius:3px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;}
+input.ce.ov{border-color:#ba7517;color:#ba7517;}
+input.ce:disabled,select.cs:disabled{opacity:.5;cursor:not-allowed;background:#f5f5f3;}
+input.ce-pri{font-size:12px;padding:3px 6px;border-radius:4px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;width:52px;text-align:center;font-weight:500;}
+input.ce-pri:disabled{opacity:.5;cursor:not-allowed;background:#f5f5f3;}
+select.cs{font-size:11px;padding:2px 3px;border-radius:3px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;}
+.estado-select{font-size:11px;padding:2px 7px;border-radius:10px;border:none;cursor:pointer;font-weight:500;appearance:none;-webkit-appearance:none;text-align:center;}
+.estado-nuevo{background:#e6f1fb;color:#0c447c;}
+.estado-aprobado{background:#f1efe8;color:#5f5e5a;}
+.estado-en_desarrollo{background:#b5d4f4;color:#0c447c;}
+.estado-pausa_cliente{background:#faeeda;color:#633806;}
+.estado-pruebas_cliente{background:#E8E3FF;color:#4A3B8F;}
+.estado-en_garantia{background:#E3F6EE;color:#176B4D;}
+.estado-completado{background:#9fe1cb;color:#085041;}
+
+
+.
+
+.dep-option{display:flex;align-items:center;gap:7px;padding:5px 10px;font-size:12px;cursor:pointer;color:#1a1a18;}
+.dep-option:hover{background:#f5f5f3;}
+.dep-option input[type=checkbox]{width:13px;height:13px;cursor:pointer;}
+.dep-none{padding:6px 10px;font-size:12px;color:#888780;}
+.del-btn{font-size:10px;padding:1px 5px;border-radius:3px;cursor:pointer;border:0.5px solid #b4b2a9;background:#f1efe8;color:#5f5e5a;}
+.del-btn:hover{background:#fcebeb;color:#a32d2d;border-color:#f09595;}
+.add-btn{font-size:11px;padding:3px 12px;border-radius:7px;cursor:pointer;border:0.5px solid #b4b2a9;background:#f1efe8;color:#1a1a18;font-weight:500;}
+.ov-dot{width:6px;height:6px;border-radius:50%;background:#ba7517;display:inline-block;margin-left:3px;vertical-align:middle;}
+.wi-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:1px 6px;border-radius:4px;background:#e6f1fb;color:#0c447c;text-decoration:none;font-weight:500;cursor:pointer;}
+.wi-badge:hover{background:#b5d4f4;}
+.wi-badge.creating{background:#faeeda;color:#633806;}
+.wi-badge.error{background:#fcebeb;color:#791f1f;}
+.wi-sync-btn{font-size:10px;padding:1px 5px;border-radius:3px;cursor:pointer;border:0.5px solid #b5d4f4;background:#e6f1fb;color:#0c447c;margin-left:3px;}
+.wi-sync-btn:hover{background:#b5d4f4;}
+
+/* DevOps */
+.devops-connected{background:#eaf3de;color:#27500a;font-size:11px;padding:2px 8px;border-radius:8px;font-weight:500;}
+.devops-disconnected{background:#faeeda;color:#633806;font-size:11px;padding:2px 8px;border-radius:8px;font-weight:500;}
+.devops-fields{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;}
+.devops-field{display:flex;flex-direction:column;gap:4px;}
+.devops-field label{font-size:11px;color:#5f5e5a;}
+.devops-field input{font-size:12px;padding:5px 9px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;width:220px;}
+.devops-field input.pat-input{font-family:monospace;letter-spacing:0.5px;}
+.devops-field input.short{width:140px;}
+.toggle-switch{width:32px;height:18px;border-radius:9px;background:#d3d1c7;position:relative;transition:background 0.2s;flex-shrink:0;cursor:pointer;display:inline-block;}
+.toggle-switch.on{background:#0078d4;}
+.toggle-switch::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left 0.2s;}
+.toggle-switch.on::after{left:16px;}
+
+/* Global devs view */
+#global-devs-view{padding:0;}
+.gd-title{font-size:15px;font-weight:500;margin-bottom:4px;}
+.gd-sub{font-size:12px;color:#888780;margin-bottom:16px;}
+.gd-table{border-collapse:collapse;width:100%;font-size:12px;}
+.gd-table th{background:#f1efe8;padding:6px 10px;border:0.5px solid #d3d1c7;font-weight:500;font-size:11px;color:#5f5e5a;text-align:left;}
+.gd-table td{padding:6px 10px;border:0.5px solid #d3d1c7;vertical-align:middle;}
+.gd-table tr:nth-child(even) td{background:#fafaf8;}
+.load-bar-wrap{width:140px;height:8px;background:#f1efe8;border-radius:4px;overflow:hidden;}
+.load-bar{height:100%;border-radius:4px;transition:width 0.3s;}
+
+/* Modals */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:200;display:flex;align-items:center;justify-content:center;}
+.modal{background:#fff;border-radius:12px;padding:24px;min-width:320px;max-width:520px;border:0.5px solid #d3d1c7;}
+.modal h2{font-size:15px;font-weight:500;margin-bottom:12px;}
+.modal p{font-size:13px;color:#5f5e5a;margin-bottom:16px;line-height:1.5;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;}
+.modal-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
+.modal-field label{font-size:12px;color:#5f5e5a;}
+.modal-field input,.modal-field select{font-size:13px;padding:6px 10px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;}
+
+/* PDF */
+#pdf-overlay{display:none;position:fixed;inset:0;background:rgba(255,255,255,0.92);z-index:300;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
+#pdf-overlay.active{display:flex;}
+.pdf-spinner{width:36px;height:36px;border:3px solid #d3d1c7;border-top-color:#378add;border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.pdf-label{font-size:13px;color:#5f5e5a;font-weight:500;}
+
+/* Project color swatches */
+.color-swatch{width:18px;height:18px;border-radius:4px;cursor:pointer;border:2px solid transparent;flex-shrink:0;}
+.color-swatch.selected{border-color:#1a1a18;}
+
+/* Cross-project overload badge */
+.overload-badge{font-size:10px;padding:1px 6px;border-radius:8px;background:#fcebeb;color:#791f1f;font-weight:500;white-space:nowrap;}
+
+
+
+.dep-popup{position:fixed;z-index:99999;background:#fff;border:0.5px solid #b4b2a9;border-radius:8px;min-width:160px;max-height:250px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,0.15);padding:4px 0;display:none;}
+.dep-popup label{display:flex;align-items:center;gap:7px;padding:4px 10px;font-size:12px;cursor:pointer;color:#1a1a18;white-space:nowrap;}
+.dep-popup label:hover{background:#f5f5f3;}
+.dep-popup input[type=checkbox]{width:13px;height:13px;cursor:pointer;}
+.dep-btn{font-size:11px;padding:2px 8px;border-radius:3px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;cursor:pointer;min-width:90px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;}
+.dep-btn:hover{background:#f5f5f3;}
+.filter-btn{font-size:11px;padding:2px 8px;border-radius:3px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;cursor:pointer;min-width:78px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
+.filter-btn:hover{background:#f5f5f3;}
+.filter-popup{position:fixed;z-index:100000;background:#fff;border:0.5px solid #b4b2a9;border-radius:8px;min-width:180px;max-width:260px;max-height:260px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,0.15);padding:4px 0;display:none;}
+.filter-popup label{display:flex;align-items:center;gap:7px;padding:4px 10px;font-size:12px;cursor:pointer;color:#1a1a18;white-space:nowrap;}
+.filter-popup label:hover{background:#f5f5f3;}
+.filter-popup input[type=checkbox]{width:13px;height:13px;cursor:pointer;}
+.filter-popup .filter-empty{padding:8px 10px;font-size:12px;color:#888780;}
+
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="sb-header">
+    <div class="sb-logo" id="sb-logo-text" onclick="editCompanyName()" title="Clic para cambiar el nombre de la empresa" style="cursor:pointer;border-radius:4px;padding:2px 4px;transition:background 0.15s;" onmouseover="this.style.background='#2c2c2a'" onmouseout="this.style.background=''">AP-AXO</div>
+    <button class="sb-toggle" onclick="toggleSidebar()" title="Colapsar sidebar">◀</button>
+  </div>
+  <div class="sb-section">
+    <div class="sb-section-label sb-collapsed-hide">PROYECTOS</div>
+    <div class="sb-proj-list" id="sb-proj-list"></div>
+    <div class="sb-add-proj" onclick="newProject()">
+      <span style="font-size:16px;color:#5f5e5a">+</span>
+      <span class="sb-collapsed-hide">Nuevo proyecto</span>
+    </div>
+  </div>
+  <div style="flex:1"></div>
+  <div class="sb-bottom">
+    <div class="sb-devs-link" id="sb-devs-link" onclick="showGlobalDevs()">
+      <span>👥</span>
+      <span class="sb-collapsed-hide">Devs globales</span>
+    </div>
+    <div class="sb-bottom-btn" onclick="exportAllJSON()">
+      <span>↓</span>
+      <span class="sb-collapsed-hide">Exportar todo</span>
+    </div>
+    <label class="sb-bottom-btn" style="cursor:pointer">
+      <span>↑</span>
+      <span class="sb-collapsed-hide">Importar</span>
+      <input type="file" accept=".json" onchange="importJSON(event)" style="display:none">
+    </label>
+  </div>
+</div>
+
+<div id="main-wrap">
+  <header>
+    <div class="header-left">
+      <div class="header-proj-dot" id="hdr-dot"></div>
+      <div class="header-proj-name" id="hdr-name">AP-AXO — Plan de Proyecto</div>
+      <span id="save-indicator" class="save-indicator saved">● Guardado</span>
+    </div>
+    <div class="header-actions">
+      <button class="hbtn primary" id="btn-pdf" onclick="exportPDF()">↓ PDF</button>
+      <button class="hbtn" onclick="exportCurrentJSON()">↓ JSON</button>
+      <button class="hbtn" onclick="renameCurrentProject()">✎ Renombrar</button>
+      <button class="hbtn danger" onclick="confirmResetProject()">Reiniciar</button>
+    </div>
+  </header>
+  <div id="content-area">
+    <div id="root"></div>
+  </div>
+</div>
+
+<div id="modal-area"></div>
+<div id="pdf-overlay"><div class="pdf-spinner"></div><div class="pdf-label" id="pdf-label">Generando PDF...</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+const SK='ap_axo_v20_multiproj';
+const PAL=[
+  {bar:'#378ADD',text:'#042C53'},{bar:'#1D9E75',text:'#04342C'},
+  {bar:'#BA7517',text:'#412402'},{bar:'#D4537E',text:'#4B1528'},
+  {bar:'#7F77DD',text:'#26215C'},{bar:'#639922',text:'#173404'},
+  {bar:'#888780',text:'#2C2C2A'}
+];
+const PROJ_COLORS=['#378ADD','#1D9E75','#BA7517','#D4537E','#7F77DD','#639922','#E24B4A','#0C447C'];
+const TODAY=new Date(); TODAY.setHours(0,0,0,0);
+const HOL=new Set(['2026-01-01','2026-04-03','2026-04-04','2026-05-01','2026-05-21','2026-06-21','2026-06-29','2026-07-16','2026-08-15','2026-08-20','2026-09-18','2026-09-19','2026-10-31','2026-11-01','2026-12-08','2026-12-25','2026-12-31','2027-01-01','2027-03-26','2027-03-27','2027-05-01','2027-05-21','2027-06-21','2027-06-28','2027-07-16','2027-08-15','2027-08-20','2027-09-17','2027-09-18','2027-09-19','2027-10-31','2027-11-01','2027-12-08','2027-12-25','2027-12-31']);
+const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const DW=14;
+const DAY_PX=15; // visual day width aligned with rendered gantt cells
+
+const DEF_DEVOPS={org:'',project:'',pat:'',autoSync:true,wiType:'Issue',areaPath:'',iterationPath:'',stNuevo:'New',stAprobado:'Approved',stEnDesarrollo:'Doing',stPausaCliente:'On Hold',stPruebasCliente:'Client Testing',stCompletado:'Done',stEnGarantia:'Warranty'};
+const DEF_PROJECT={id:'',name:'Proyecto',color:'#378ADD',globalStart:'2026-03-20',hpd:8,devops:{...DEF_DEVOPS},filters:{estado:[],id:[],name:[],dev:[]},devs:[],tasks:[]};
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let G; // { projects:[...], globalDevs:[...], activeProjectId, sidebarCollapsed }
+let openDrop=null, saveTimer=null, viewingGlobalDevs=false;
+
+function activeProject(){return G.projects.find(p=>p.id===G.activeProjectId)||G.projects[0];}
+
+
+function forceReset(){
+  try{localStorage.removeItem(SK);}catch(e){}
+  G={projects:[mkProject('AP-AXO')],globalDevs:[],companyName:'AP-AXO',activeProjectId:'',sidebarCollapsed:false};
+  G.activeProjectId=G.projects[0].id;
+  saveState();renderSidebar();render();
+  showToast('Datos reiniciados','success');
+}
+
+function sanitizeProject(p,i){
+  if(!p.id)p.id='proj_'+Date.now()+'_'+i;
+  if(!p.name||p.name==='undefined'||typeof p.name!=='string')p.name='Proyecto '+(i+1);
+  if(!p.color)p.color=PROJ_COLORS[i%PROJ_COLORS.length];
+  if(!p.devops||typeof p.devops!=='object')p.devops={...DEF_DEVOPS};
+  else{
+    if(!p.devops.stNuevo)p.devops.stNuevo='New';
+    if(!p.devops.stAprobado)p.devops.stAprobado='Approved';
+    if(!p.devops.stEnDesarrollo)p.devops.stEnDesarrollo='Doing';
+    if(!p.devops.stPausaCliente)p.devops.stPausaCliente='On Hold';
+    if(!p.devops.stPruebasCliente)p.devops.stPruebasCliente='Client Testing';
+    if(!p.devops.stCompletado)p.devops.stCompletado='Done';
+    if(!p.devops.stEnGarantia)p.devops.stEnGarantia='Warranty';
+    if(!p.devops.wiType)p.devops.wiType='Issue';
+    if(p.devops.stTerminado&&!p.devops.stCompletado)p.devops.stCompletado=p.devops.stTerminado;
+    if(p.devops.autoSync===undefined)p.devops.autoSync=true;
+  }
+  if(!Array.isArray(p.devs))p.devs=[];
+  if(!Array.isArray(p.tasks))p.tasks=[];
+  if(!p.globalStart||typeof p.globalStart!=='string')p.globalStart='2026-03-20';
+  if(!p.hpd||typeof p.hpd!=='number')p.hpd=8;
+  if(!p.filters||typeof p.filters!=='object')p.filters={estado:[],id:[],name:[],dev:[]};
+  else{
+    const normalizeFilterField=v=>Array.isArray(v)?v.filter(x=>x!==undefined&&x!==null&&String(x).trim()!=='').map(x=>String(x)):(v&&String(v).trim()!==''?[String(v)]:[]);
+    p.filters.estado=normalizeFilterField(p.filters.estado);
+    p.filters.id=normalizeFilterField(p.filters.id);
+    p.filters.name=normalizeFilterField(p.filters.name);
+    p.filters.dev=normalizeFilterField(p.filters.dev);
+  }
+  if(!p.globalDevOverrides||typeof p.globalDevOverrides!=='object')p.globalDevOverrides={};
+  p.devs.forEach(d=>{
+    if(d.avail===undefined||d.avail===null)d.avail=100;
+    if(d.global===undefined)d.global=false;
+    if(!d.id)d.id='d'+Date.now()+Math.random();
+    if(!d.name)d.name='Dev';
+    if(d.active===undefined)d.active=true;
+  });
+  p.tasks.forEach(t=>{
+    if(!t.deps)t.deps=[];
+    if(!t.estado)t.estado='nuevo';
+    if(!t.total||isNaN(t.total))t.total=8;
+    if(t.hDev===undefined){t.hDev=t.total;t.hTest=0;t.garantia=0;}
+    if(t.garantia===undefined)t.garantia=0;
+    t.total=(t.hDev||0)+(t.hTest||0)+(t.garantia||0)||1;
+    if(!t.pri||isNaN(t.pri))t.pri=1;
+    if(t.delayDays===undefined||t.delayDays===null||isNaN(t.delayDays))t.delayDays=0;
+    t.delayDays=Math.max(0,parseInt(t.delayDays)||0);
+    if(t.testDays===undefined||t.testDays===null||isNaN(t.testDays))t.testDays=0;
+    t.testDays=Math.max(0,parseInt(t.testDays)||0);
+    if(t.estado==='terminado')t.estado='completado';
+    if(t.estado==='pausado')t.estado='pausa_cliente';
+    if(t.estado==='pendiente')t.estado='aprobado';
+    if(t.estado==='completado'){
+      if(!t.eoPlan && t.eo)t.eoPlan=t.eo;
+      if(!t.eoReal){
+        t.eoReal=t.eo||t.eoPlan||null;
+      }
+    } else {
+      if(!t.eo && t.eoPlan)t.eo=t.eoPlan;
+    }
+  });
+  return p;
+}
+
+function loadState(){
+  let raw=null;
+  try{raw=localStorage.getItem(SK);}catch(e){}
+  // Try old keys for migration
+  if(!raw){
+    ['ap_axo_gantt_v14','ap_axo_v20_multiproj_old'].forEach(k=>{
+      if(!raw)try{raw=localStorage.getItem(k);}catch(e){}
+    });
+  }
+  try{
+    if(raw){
+      const parsed=JSON.parse(raw);
+      // Old single-project format
+      if(!parsed.projects&&parsed.tasks){
+        const p=sanitizeProject({...JSON.parse(JSON.stringify(DEF_PROJECT)),...parsed,id:'proj_migrated',color:PROJ_COLORS[0]},0);
+        G={projects:[p],globalDevs:[],companyName:'AP-AXO',activeProjectId:p.id,sidebarCollapsed:false};
+      } else {
+        G=parsed;
+      }
+      if(!G||typeof G!=='object')throw new Error('Invalid state');
+      if(!Array.isArray(G.projects)||G.projects.length===0)G.projects=[mkProject('AP-AXO')];
+      if(!Array.isArray(G.globalDevs))G.globalDevs=[];
+      if(!G.companyName||typeof G.companyName!=='string')G.companyName='AP-AXO';
+      if(typeof G.sidebarCollapsed!=='boolean')G.sidebarCollapsed=false;
+      G.projects=G.projects.map((p,i)=>sanitizeProject(p,i));
+      G.globalDevs.forEach(d=>{
+        if(d.avail===undefined||d.avail===null)d.avail=100;
+        if(!d.id)d.id='gd'+Date.now();
+        if(!d.name)d.name='Dev';
+        if(d.active===undefined)d.active=true;
+      });
+      if(!G.projects.find(p=>p.id===G.activeProjectId))G.activeProjectId=G.projects[0].id;
+      return;
+    }
+  }catch(e){
+    console.warn('loadState failed, starting fresh:',e);
+  }
+  G={projects:[mkProject('AP-AXO')],globalDevs:[],companyName:'AP-AXO',activeProjectId:'',sidebarCollapsed:false};
+  G.activeProjectId=G.projects[0].id;
+}
+
+function mkProject(name){
+  const id='proj_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  const color=PROJ_COLORS[Math.floor(Math.random()*PROJ_COLORS.length)];
+  return{...JSON.parse(JSON.stringify(DEF_PROJECT)),id,name,color};
+}
+
+function saveState(){
+  setSI('saving');clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{
+    try{localStorage.setItem(SK,JSON.stringify(G));setSI('saved');}
+    catch(e){setSI('unsaved');}
+  },400);
+}
+
+function setSI(s){
+  const el=document.getElementById('save-indicator');if(!el)return;
+  el.className='save-indicator '+s;
+  el.textContent=s==='saved'?'● Guardado':s==='saving'?'● Guardando...':'● Sin guardar';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function isWD(d){const w=d.getDay();return w!==0&&w!==6&&!HOL.has(iso(d));}
+function addWD(d,n){
+  // Returns the nth workday FROM d (inclusive = d counts as day 1 if workday)
+  // addWD(20/03, 5) with 20/03=Friday → day1=20,day2=23,day3=24,day4=25,day5=26 → 26/03
+  if(n<=0)return new Date(d);
+  let x=new Date(d);
+  // If start is already a workday, it counts as day 1
+  let c=isWD(x)?1:0;
+  while(c<n){x.setDate(x.getDate()+1);if(isWD(x))c++;}
+  return x;
+}
+function wdB(a,b){let d=new Date(a),c=0;while(d<b){d.setDate(d.getDate()+1);if(isWD(d))c++;}return c;}
+function nxWD(d){let x=new Date(d);while(!isWD(x))x.setDate(x.getDate()+1);return x;}
+function nextWD(d){
+  // First workday AFTER d (strictly after, not same day)
+  let x=new Date(d);
+  x.setDate(x.getDate()+1);
+  return nxWD(x);
+}
+function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function fmt(d){return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'});}
+function hexToRgbObj(hex){
+  const v=String(hex||'').replace('#','');
+  if(v.length!==6)return{r:180,g:178,b:169};
+  return{r:parseInt(v.slice(0,2),16),g:parseInt(v.slice(2,4),16),b:parseInt(v.slice(4,6),16)};
+}
+function rgbToHex(r,g,b){
+  return '#'+[r,g,b].map(x=>Math.max(0,Math.min(255,Math.round(x))).toString(16).padStart(2,'0')).join('');
+}
+function lightenColor(hex,factor=0.22){
+  const {r,g,b}=hexToRgbObj(hex);
+  return rgbToHex(r+(255-r)*factor,g+(255-g)*factor,b+(255-b)*factor);
+}
+function darkenColor(hex,factor=0.12){
+  const {r,g,b}=hexToRgbObj(hex);
+  return rgbToHex(r*(1-factor),g*(1-factor),b*(1-factor));
+}
+// Normalize date to midnight LOCAL time (prevents timezone 1-day offsets)
+function norm(d){const x=new Date(d);x.setHours(0,0,0,0);return x;}
+// Parse a YYYY-MM-DD string to midnight local (avoids UTC parsing offset)
+function parseDate(s){if(!s)return null;const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
+function holsIn(s,e){let d=new Date(s),c=0;while(d<=e){const w=d.getDay();if(w!==0&&w!==6&&HOL.has(iso(d)))c++;d.setDate(d.getDate()+1);}return c;}
+function wdInclusive(a,b){
+  if(!a||!b)return 0;
+  const s=norm(a),e=norm(b);
+  if(e<s)return isWD(s)?1:0;
+  return wdB(s,e)+(isWD(s)?1:0);
+}
+function taskBaseHours(task){
+  return Math.max(1,((task?.hDev)||0)+((task?.hTest)||0)+((task?.garantia)||0));
+}
+function taskDelayHours(task,proj){
+  return Math.max(0,parseInt(task?.delayDays)||0)*(proj?.hpd||8);
+}
+function taskTestDaysHours(task,proj){
+  return Math.max(0,parseInt(task?.testDays)||0)*(proj?.hpd||8);
+}
+function taskExtraDays(task){
+  return Math.max(0,parseInt(task?.delayDays)||0)+Math.max(0,parseInt(task?.testDays)||0);
+}
+function taskEffectiveHours(task,proj){
+  return taskBaseHours(task);
+}
+function taskCountableHours(task){
+  return taskBaseHours(task);
+}
+function taskScheduleDays(task,proj){
+  const hpd=(proj?.hpd||8);
+  const baseDays=Math.max(1,Math.ceil(taskBaseHours(task)/hpd));
+  return baseDays+taskExtraDays(task);
+}
+function taskDisplayDays(task,proj){
+  const hpd=(proj?.hpd||8);
+  return Math.max(1,Math.ceil(taskBaseHours(task)/hpd));
+}
+function calcTaskRealUsage(task,proj){
+  if(!task||task.estado!=='completado')return {hoursReal:0,daysReal:0,hoursCalendar:0,delayHours:0,testDaysHours:0,hoursAvailable:0,devUsed:0,testUsed:0,garUsed:0,devRemaining:0,testRemaining:0,garRemaining:0};
+
+  const hpd=proj?.hpd||8;
+  const hDev=task.hDev||0;
+  const hTest=task.hTest||0;
+  const hGar=task.garantia||0;
+  const start=parseDate(task.so||task.start);
+  const end=parseDate(task.eoReal||task.eo||task.eoPlan||task.end||task.so);
+  const hoursCalendar=(start&&end)?Math.max(0,wdInclusive(start,end)*hpd):0;
+  const delayHours=taskDelayHours(task,proj);
+  const testDaysHours=taskTestDaysHours(task,proj);
+  const hoursAvailable=Math.max(0,hoursCalendar-delayHours-testDaysHours);
+
+  let remainingWindow=hoursAvailable;
+  const devUsed=Math.min(hDev,remainingWindow);
+  remainingWindow=Math.max(0,remainingWindow-devUsed);
+  const testUsed=Math.min(hTest,remainingWindow);
+  remainingWindow=Math.max(0,remainingWindow-testUsed);
+  const garUsed=Math.min(hGar,remainingWindow);
+  const hoursReal=devUsed+testUsed+garUsed;
+  const daysReal=Math.ceil(hoursReal/hpd);
+
+  return {
+    hoursReal,
+    daysReal,
+    hoursCalendar,
+    delayHours,
+    testDaysHours,
+    hoursAvailable,
+    devUsed,
+    testUsed,
+    garUsed,
+    devRemaining:Math.max(0,hDev-devUsed),
+    testRemaining:Math.max(0,hTest-testUsed),
+    garRemaining:Math.max(0,hGar-garUsed)
+  };
+}
+function calcProjectRealUsage(proj){
+  const tasks=proj.tasks||[];
+  const totalEstimated=tasks.reduce((s,t)=>s+taskCountableHours(t),0);
+  const doneTasks=tasks.filter(t=>t.estado==='completado');
+  const usageList=doneTasks.map(t=>calcTaskRealUsage(t,proj));
+
+  const hoursReal=usageList.reduce((s,u)=>s+u.hoursReal,0);
+  const remDev=usageList.reduce((s,u)=>s+u.devRemaining,0);
+  const remTest=usageList.reduce((s,u)=>s+u.testRemaining,0);
+  const remGar=usageList.reduce((s,u)=>s+u.garRemaining,0);
+  const remainingReal=remDev+remTest+remGar;
+
+  return {
+    totalEstimated,
+    hoursReal,
+    remDev,
+    remTest,
+    remGar,
+    remainingReal,
+    doneCount: doneTasks.length
+  };
+}
+function gc(pi){return PAL[pi%PAL.length];}
+function dByI(id,proj){return (proj.devs||[]).find(d=>d.id===id)||G.globalDevs.find(d=>d.id===id);}
+function locked(t){return t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia';}
+function canSo(t){return t.estado==='nuevo'||t.estado==='aprobado'||t.estado==='en_desarrollo'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia';}
+function calDays(a,b){const d=[];let x=new Date(a);while(x<=b){d.push(new Date(x));x.setDate(x.getDate()+1);}return d;}
+function mSpans(days){const s=[];let c=null;days.forEach(d=>{const k=d.getFullYear()*100+d.getMonth();if(!c||c.k!==k){c={k,label:MES[d.getMonth()]+' '+d.getFullYear(),n:0};s.push(c);}c.n++;});return s;}
+function pxL(d,mn){
+  // Horizontal offset aligned to the rendered calendar grid.
+  // The first visible day column starts after the calendar's left boundary,
+  // so bars must be shifted exactly 1 visual day to the right.
+  const days=Math.round((norm(d)-norm(mn))/86400000);
+  return Math.max(0,days + 1)*DAY_PX;
+}
+function pxW(s,e){
+  // Inclusive width: a task that starts and ends on the same day occupies 1 day.
+  const days=Math.round((norm(e)-norm(s))/86400000);
+  return Math.max(1,(days+1))*DAY_PX;
+}
+
+function applyRealBarPositions(){
+  const root=document.getElementById('root');
+  if(!root)return;
+  const dayCells=Array.from(root.querySelectorAll('.gantt-day-cell[data-date]'));
+  if(!dayCells.length)return;
+
+  const byDate={};
+  dayCells.forEach(cell=>{byDate[cell.dataset.date]=cell;});
+
+  root.querySelectorAll('.gantt-range[data-start][data-end]').forEach(bar=>{
+    const sCell=byDate[bar.dataset.start];
+    const eCell=byDate[bar.dataset.end];
+    const area=bar.parentElement;
+    if(!sCell||!eCell||!area){
+      bar.style.visibility='hidden';
+      return;
+    }
+
+    const areaRect=area.getBoundingClientRect();
+    const sRect=sCell.getBoundingClientRect();
+    const eRect=eCell.getBoundingClientRect();
+
+    const left=Math.round(sRect.left-areaRect.left);
+    const width=Math.round(eRect.right-sRect.left);
+
+    bar.style.left=left+'px';
+    bar.style.width=Math.max(1,width)+'px';
+    bar.style.visibility='visible';
+  });
+}
+
+// All devs for a project = local + global (with per-project overrides applied)
+function allDevs(proj){
+  const locals=proj.devs||[];
+  const ov=proj.globalDevOverrides||{};
+  const globals=G.globalDevs.map(d=>{
+    const o=ov[d.id]||{};
+    return{
+      ...d,
+      avail:o.avail!==undefined?o.avail:d.avail??100,
+      active:o.active!==undefined?o.active:true
+    };
+  });
+  return [...locals,...globals];
+}
+
+function sortedTasks(proj){
+  if(!proj.tasks||proj.tasks.length===0)return[];
+  const done   =proj.tasks.filter(t=>t.estado==='completado').sort((a,b)=>a.pri-b.pri);
+  const active =proj.tasks.filter(t=>t.estado==='en_desarrollo').sort((a,b)=>a.pri-b.pri);
+  const paused =proj.tasks.filter(t=>t.estado==='pausa_cliente').sort((a,b)=>a.pri-b.pri);
+  const client =proj.tasks.filter(t=>t.estado==='pruebas_cliente').sort((a,b)=>a.pri-b.pri);
+  const warranty=proj.tasks.filter(t=>t.estado==='en_garantia').sort((a,b)=>a.pri-b.pri);
+  const approved=proj.tasks.filter(t=>t.estado==='aprobado').sort((a,b)=>a.pri-b.pri);
+  const nuevo =proj.tasks.filter(t=>t.estado==='nuevo').sort((a,b)=>a.pri-b.pri);
+  return [...done,...active,...paused,...client,...approved,...nuevo,...warranty];
+}
+
+function displaySortedTasks(tasks){
+  return [...(tasks||[])].sort((a,b)=>{
+    const aHas=!!a.start, bHas=!!b.start;
+    if(aHas&&bHas){
+      const diff=norm(a.start)-norm(b.start);
+      if(diff!==0)return diff;
+    }else if(aHas!==bHas){
+      return aHas?-1:1;
+    }
+    const pDiff=(a.pri||999)-(b.pri||999);
+    if(pDiff!==0)return pDiff;
+    return String(a.id||'').localeCompare(String(b.id||''),'es',{numeric:true,sensitivity:'base'});
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCHEDULER — availability-weighted
+// ═══════════════════════════════════════════════════════════════
+function sched(proj){
+  const gs=nxWD(parseDate(proj.globalStart));
+  const hpd=proj.hpd||8;
+  const devs=allDevs(proj);
+  const ad=devs.filter(d=>d.active!==false);
+
+  if(devs.length===0)return{sch:[],df:{}};
+
+  // Pre-clean: reset invalid pending assignments
+  proj.tasks.forEach(t=>{
+    if((t.estado==='nuevo'||t.estado==='aprobado')&&t.pdi){
+      const dev=devs.find(d=>d.id===t.pdi);
+      if(!dev||dev.active===false||(dev.avail??100)===0){
+        t.pdi=null;t.so=null;t.eo=null;t._autoPdi=true;t._manualSo=false;
+      }
+    }
+  });
+
+  // df[devId] = next free date
+  const df={};
+  devs.forEach(d=>df[d.id]=new Date(gs));
+
+  // lockedHours[devId] = hours already committed in en_desarrollo/terminado
+  const lockedHours={};
+  devs.forEach(d=>lockedHours[d.id]=0);
+
+  // Pre-load df and lockedHours only from tasks still consuming agenda.
+  // Terminated tasks are historical records and must NOT block planning.
+  proj.tasks.forEach(t=>{
+    if((t.estado==='en_desarrollo'||t.estado==='en_garantia')&&t.pdi){
+      if(t.eo&&df[t.pdi]!==undefined){
+        const freeFrom=nextWD(parseDate(t.eo));
+        if(freeFrom>df[t.pdi])df[t.pdi]=new Date(freeFrom);
+      }
+      if(lockedHours[t.pdi]!==undefined)
+        lockedHours[t.pdi]+=taskEffectiveHours(t,proj);
+    }
+  });
+
+  // Calculate pending hours to distribute
+  const pendingHours=proj.tasks
+    .filter(t=>t.estado==='nuevo'||t.estado==='aprobado')
+    .reduce((s,t)=>s+taskCountableHours(t),0);
+
+  // Active pool: devs with avail > 0
+  const pool=ad.filter(d=>(d.avail??100)>0);
+  const totalAvail=pool.reduce((s,d)=>s+(d.avail??100),0)||1;
+
+  // Each dev's quota = their proportional share of PENDING hours only
+  // lockedHours are NOT deducted — quota is purely about pending distribution
+  const quota={};
+  pool.forEach(d=>{
+    const share=(d.avail??100)/totalAvail;
+    quota[d.id]=pendingHours*share;
+  });
+
+  // Track pending hours assigned in this run
+  // Initialize with lockedHours so total load is considered in scoring
+  const assignedPending={};
+  devs.forEach(d=>assignedPending[d.id]=lockedHours[d.id]||0);
+
+  const fm={};
+
+  function daysNeeded(t){
+    if(t.estado==='completado'){
+      const endIso=t.eoReal||t.eo||t.eoPlan;
+      if(t.so&&endIso){
+        const s=parseDate(t.so),e=parseDate(endIso);
+        return Math.max(1,wdB(s,e)+(isWD(s)?1:0));
+      }
+    }
+    return taskScheduleDays(t,proj);
+  }
+
+  // Score dev for next task:
+  // Primary: is dev within quota? (don't assign if over quota and others have quota left)
+  // Secondary: earliest finish (no gaps)
+  // Tertiary: quota ratio (balance)
+  function bestDev(eligiblePool,depEnd,dn,taskHours){
+    // Find earliest start among all eligible devs
+    let earliestStart=null;
+    const candidates=[];
+    for(const dev of eligiblePool){
+      if((dev.avail??100)===0)continue;
+      const freeAt=new Date(Math.max(
+        (df[dev.id]||new Date(0)).getTime(),
+        depEnd.getTime()
+      ));
+      const start=nxWD(freeAt);
+      const end=addWD(start,dn);
+      const devQuota=quota[dev.id]??0;
+      const pendingAssigned=Math.max(0,(assignedPending[dev.id]||0)-(lockedHours[dev.id]||0));
+      const remainingQuota=devQuota-pendingAssigned;
+      candidates.push({dev,start,end,remainingQuota});
+      if(!earliestStart||start<earliestStart)earliestStart=start;
+    }
+    if(!candidates.length)return null;
+
+    // Check if any dev still has quota remaining
+    const anyHasQuota=candidates.some(c=>c.remainingQuota>0);
+
+    let chosen=null,bestScore=null;
+    for(const {dev,start,end,remainingQuota} of candidates){
+      // Days after earliest available
+      const startDelay=(start.getTime()-earliestStart.getTime())/864e5;
+
+      // pendingOnly = assigned pending hours (excluding locked)
+      const pendingOnly=Math.max(0,(assignedPending[dev.id]||0)-(lockedHours[dev.id]||0));
+
+      // If someone has quota and this dev is over their pending quota → penalty
+      const overQuotaPenalty=(anyHasQuota&&remainingQuota<=0)?1000:0;
+
+      // Quota ratio based on pending hours only
+      const devQuota=Math.max(1,quota[dev.id]??1);
+      const quotaRatio=(pendingOnly+taskHours)/devQuota;
+
+      // Score: over-quota penalty first, then delay, then quota ratio
+      const score=overQuotaPenalty + startDelay*10 + quotaRatio;
+
+      if(bestScore===null||score<bestScore){
+        bestScore=score;
+        chosen={dev,start,end};
+      }
+    }
+    return chosen;
+  }
+
+  const res=[];
+  for(const t of sortedTasks(proj)){
+    const depEnd=t.deps.reduce((m,dep)=>{
+      const d=fm[dep];return d&&d>m?d:m;
+    },new Date(gs));
+    const dn=daysNeeded(t);
+
+    // ── LOCKED / HISTORICAL TASKS ─────────────────────────────────────
+    if(t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia'){
+      const adev=dByI(t.pdi,proj)||devs[0];
+      const fs=t.so?parseDate(t.so):nxWD(new Date(df[adev.id]>depEnd?df[adev.id]:depEnd));
+      const fe = t.estado==='completado'
+        ? parseDate(t.eoReal||t.eo||t.eoPlan||iso(fs))
+        : (t.eo ? parseDate(t.eo) : addWD(fs,dn));
+
+      // Only tasks still in progress should continue blocking the developer.
+      if((t.estado==='en_desarrollo'||t.estado==='en_garantia')&&df[adev.id]!==undefined&&nextWD(fe)>df[adev.id])df[adev.id]=nextWD(fe);
+
+      fm[t.id]=new Date(fe);
+      res.push({...t,adev,start:fs,end:fe,days:taskDisplayDays(t,proj),spanDays:dn,hols:holsIn(fs,fe)});
+      continue;
+    }
+
+    // ── PENDING TASKS ─────────────────────────────────────
+    const effectivePool=pool.length>0?pool:(ad.length>0?ad:devs);
+    let chosenDev,chosenStart,chosenEnd;
+
+    if(t._manualSo&&t.so){
+      // User set start date — force that date as the schedule base.
+      // Only adjust to the next valid workday and to hard blockers:
+      // dependencies and locked tasks of the same dev.
+      const assignedDev=t.pdi?dByI(t.pdi,proj):null;
+      if(assignedDev){
+        chosenDev=assignedDev;
+      } else {
+        const best=bestDev(effectivePool,depEnd,dn,taskEffectiveHours(t,proj));
+        chosenDev=best?best.dev:effectivePool[0];
+      }
+
+      const userStart=nxWD(parseDate(t.so));
+      // Manual start must be honored as the base date.
+      // Only hard blockers can move it: actual dependencies and locked tasks
+      // of the same dev. Global project start must NOT push a manual date.
+      let minStart=new Date(userStart);
+
+      if(t.deps&&t.deps.length){
+        let depsMin=null;
+        t.deps.forEach(dep=>{
+          const d=fm[dep];
+          if(d){
+            const depFreeFrom=nextWD(d);
+            if(!depsMin||depFreeFrom>depsMin) depsMin=depFreeFrom;
+          }
+        });
+        if(depsMin&&depsMin>minStart) minStart=depsMin;
+      }
+
+      proj.tasks.forEach(x=>{
+        if(
+          x.id!==t.id &&
+          x.pdi===chosenDev.id &&
+          (x.estado==='en_desarrollo'||x.estado==='pausa_cliente'||x.estado==='pruebas_cliente'||x.estado==='en_garantia') &&
+          x.eo
+        ){
+          const lockedFreeFrom=nextWD(parseDate(x.eo));
+          if(lockedFreeFrom>minStart) minStart=lockedFreeFrom;
+        }
+      });
+
+      chosenStart=minStart;
+      chosenEnd=addWD(chosenStart,dn);
+    } else if(t.pdi&&!t._autoPdi&&effectivePool.find(d=>d.id===t.pdi)){
+      // User explicitly assigned dev — respect it
+      chosenDev=dByI(t.pdi,proj);
+      const freeAt=new Date(Math.max(
+        (df[chosenDev.id]||new Date(0)).getTime(),
+        depEnd.getTime()
+      ));
+      chosenStart=nxWD(freeAt);
+      chosenEnd=addWD(chosenStart,dn);
+    } else {
+      // Auto-assign by quota + availability
+      const best=bestDev(effectivePool,depEnd,dn,taskEffectiveHours(t,proj));
+      if(best){
+        chosenDev=best.dev;chosenStart=best.start;chosenEnd=best.end;
+      } else {
+        chosenDev=effectivePool[0]||devs[0];
+        const freeAt=new Date(Math.max(
+          (df[chosenDev.id]||new Date(0)).getTime(),
+          TODAY.getTime(),
+          depEnd.getTime()
+        ));
+        chosenStart=nxWD(freeAt);chosenEnd=addWD(chosenStart,dn);
+      }
+    }
+
+    // Update tracking
+    const tRef=proj.tasks.find(x=>x.id===t.id);
+    if(tRef){
+      tRef.pdi=chosenDev.id;
+      tRef._autoPdi=!!(t._autoPdi||!t.pdi);
+      if(!tRef._manualSo)tRef.so=iso(chosenStart);
+      tRef.eo=iso(chosenEnd);
+      t.eo=iso(chosenEnd);
+      if(!t._manualSo)t.so=iso(chosenStart);
+    }
+    assignedPending[chosenDev.id]=(assignedPending[chosenDev.id]||0)+taskEffectiveHours(t,proj); // tracks total load
+    if(df[chosenDev.id]!==undefined)df[chosenDev.id]=nextWD(chosenEnd);
+    fm[t.id]=new Date(chosenEnd);
+    res.push({...t,adev:chosenDev,start:chosenStart,end:chosenEnd,days:taskDisplayDays(t,proj),spanDays:dn,hols:holsIn(chosenStart,chosenEnd)});
+  }
+  return{sch:res,df};
+}
+// ═══════════════════════════════════════════════════════════════
+// CROSS-PROJECT LOAD ANALYSIS
+// ═══════════════════════════════════════════════════════════════
+function crossProjectLoad(){
+  // Cross-project load: sum hours per global dev across ALL projects (for overload warnings)
+  const loads={};
+  G.globalDevs.forEach(d=>{loads[d.id]={hours:0,projects:[]};});
+  G.projects.forEach(proj=>{
+    const{sch}=sched(proj);
+    sch.forEach(t=>{
+      if(t.estado==='completado'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente')return;
+      const devId=t.adev&&t.adev.id;
+      if(loads[devId]){
+        loads[devId].hours+=taskCountableHours(t);
+        if(!loads[devId].projects.includes(proj.name))loads[devId].projects.push(proj.name);
+      }
+    });
+  });
+  return loads;
+}
+
+function projectLoad(proj){
+  // Hours assigned to each dev in THIS project only
+  const loads={};
+  G.globalDevs.forEach(d=>{loads[d.id]=0;});
+  (proj.devs||[]).forEach(d=>{loads[d.id]=0;});
+  const{sch}=sched(proj);
+  sch.forEach(t=>{
+    if(t.estado==='completado'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente')return;
+    const devId=t.adev&&t.adev.id;
+    if(devId&&loads[devId]!==undefined) loads[devId]+=taskCountableHours(t);
+  });
+  return loads;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DEVOPS HELPERS
+// ═══════════════════════════════════════════════════════════════
+function getEstadoWI(estado,proj){
+  const d=proj.devops;
+  if(estado==='nuevo') return d.stNuevo||'New';
+  if(estado==='aprobado') return d.stAprobado||'Approved';
+  if(estado==='en_desarrollo') return d.stEnDesarrollo||'Doing';
+  if(estado==='pausa_cliente') return d.stPausaCliente||'On Hold';
+  if(estado==='pruebas_cliente') return d.stPruebasCliente||'Client Testing';
+  if(estado==='completado') return d.stCompletado||d.stTerminado||'Done';
+  if(estado==='en_garantia') return d.stEnGarantia||'Warranty';
+  if(estado==='terminado') return d.stCompletado||d.stTerminado||'Done';
+  return d.stNuevo||'New';
+}
+function devopsConfigured(proj){
+  const d=proj.devops;
+  return d.org&&d.project&&d.pat&&d.org.trim()&&d.project.trim()&&d.pat.trim();
+}
+function devopsHeaders(proj){
+  return{'Content-Type':'application/json-patch+json','Authorization':'Basic '+btoa(':'+proj.devops.pat.trim())};
+}
+function devopsUrl(proj,path){
+  const org=proj.devops.org.trim().replace(/\/+$/,'');
+  const prj=encodeURIComponent(proj.devops.project.trim());
+  return `${org}/${prj}/_apis/${path}`;
+}
+function wiUrl(taskId,proj){
+  const t=proj.tasks.find(x=>x.id===taskId);
+  if(!t||!t.wiId)return null;
+  return `${proj.devops.org.trim().replace(/\/+$/,'')}/${proj.devops.project.trim()}/_workitems/edit/${t.wiId}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════
+function showToast(msg,type='success'){
+  const el=document.createElement('div');
+  el.style.cssText=`position:fixed;bottom:24px;right:24px;z-index:400;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:500;max-width:360px;transition:opacity 0.4s;${type==='success'?'background:#eaf3de;color:#27500a;border:0.5px solid #639922':'background:#fcebeb;color:#791f1f;border:0.5px solid #e24b4a'}`;
+  el.textContent=msg;
+  document.body.appendChild(el);
+  setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),400);},3000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════════════════
+function toggleSidebar(){
+  G.sidebarCollapsed=!G.sidebarCollapsed;
+  const sb=document.getElementById('sidebar');
+  sb.classList.toggle('collapsed',G.sidebarCollapsed);
+  const btn=sb.querySelector('.sb-toggle');
+  if(btn)btn.textContent=G.sidebarCollapsed?'▶':'◀';
+  saveState();
+}
+
+function renderSidebar(){
+  const list=document.getElementById('sb-proj-list');
+  if(!list)return;
+  list.innerHTML=G.projects.map(p=>`
+    <div class="sb-proj ${p.id===G.activeProjectId&&!viewingGlobalDevs?'active':''}" onclick="switchProject('${p.id}')" style="padding-right:4px;">
+      <span class="sb-proj-dot" style="background:${p.color}"></span>
+      <span class="sb-proj-name">${p.name}</span>
+      <span class="sb-proj-tasks">${p.tasks.length}</span>
+      <button onclick="event.stopPropagation();deleteProject('${p.id}')" title="Eliminar proyecto"
+        style="background:none;border:none;color:#5f5e5a;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;border-radius:3px;flex-shrink:0;opacity:0;"
+        class="sb-del-proj-btn">✕</button>
+    </div>
+  `).join('');
+  // Show delete btn on hover via CSS injection
+  if(!document.getElementById('sb-del-style')){
+    const s=document.createElement('style');s.id='sb-del-style';
+    s.textContent='.sb-proj:hover .sb-del-proj-btn{opacity:1!important;}.sb-del-proj-btn:hover{color:#e24b4a!important;}';
+    document.head.appendChild(s);
+  }
+  // Update company name in logo
+  const logo=document.getElementById('sb-logo-text');
+  if(logo){
+    const name=G.companyName||'AP-AXO';
+    const parts=name.split('-');
+    logo.innerHTML=parts.length>1?`<span>${parts[0]}</span>-${parts.slice(1).join('-')}`:name;
+  }
+  const devLink=document.getElementById('sb-devs-link');
+  if(devLink)devLink.classList.toggle('active',viewingGlobalDevs);
+  // header
+  if(!viewingGlobalDevs){
+    const proj=activeProject();
+    document.getElementById('hdr-dot').style.background=proj.color;
+    document.getElementById('hdr-name').textContent=proj.name+' — Plan de Proyecto';
+  }else{
+    document.getElementById('hdr-dot').style.background='#888780';
+    document.getElementById('hdr-name').textContent='Desarrolladores Globales';
+  }
+}
+
+function switchProject(id){
+  G.activeProjectId=id;
+  viewingGlobalDevs=false;
+  saveState();
+  renderSidebar();
+  render();
+}
+
+function deleteProject(id){
+  if(G.projects.length<=1){showModal('No se puede eliminar','Debe existir al menos un proyecto.',()=>{});return;}
+  const p=G.projects.find(x=>x.id===id);if(!p)return;
+  showModal('Eliminar proyecto',
+    `¿Eliminar <strong>${p.name}</strong> y todas sus tareas? Esta acción no se puede deshacer.`,
+    ()=>{
+      G.projects=G.projects.filter(x=>x.id!==id);
+      if(G.activeProjectId===id){G.activeProjectId=G.projects[0].id;viewingGlobalDevs=false;}
+      saveState();renderSidebar();render();
+      showToast(`Proyecto "${p.name}" eliminado`,'success');
+    }
+  );
+}
+
+function editCompanyName(){
+  showModal('Nombre de la empresa',
+    '<div class="modal-field"><label>Nombre</label><input id="cn-input" value="'+(G.companyName||'AP-AXO')+'" style="font-size:13px;padding:6px 10px;border-radius:6px;border:0.5px solid #b4b2a9;width:100%" maxlength="40" placeholder="Ej: MI-EMPRESA"></div>'
+    +'<div style="font-size:11px;color:#888780;margin-top:-6px;">Se mostrará en el sidebar y en los PDFs exportados.</div>',
+    ()=>{
+      const v=document.getElementById('cn-input')?.value.trim()||'AP-AXO';
+      G.companyName=v;
+      saveState();
+      // Update logo text immediately
+      const logo=document.getElementById('sb-logo-text');
+      if(logo){
+        const parts=v.split('-');
+        logo.innerHTML=parts.length>1?'<span>'+parts[0]+'</span>-'+parts.slice(1).join('-'):v;
+      }
+      renderSidebar();
+      showToast('Nombre actualizado: '+v,'success');
+    }
+  );
+  setTimeout(()=>{const inp=document.getElementById('cn-input');if(inp){inp.select();}},50);
+}
+
+
+function showGlobalDevs(){
+  viewingGlobalDevs=true;
+  renderSidebar();
+  renderGlobalDevsView();
+}
+
+function newProject(){
+  const swatchesNew=PROJ_COLORS.map(c=>'<div class="color-swatch" style="background:'+c+'" onclick="selectSwatchNew(\''+c+'\')"></div>').join('');
+  showModal('Nuevo Proyecto',
+    '<div class="modal-field"><label>Nombre del proyecto</label><input id="np-name" value="Nuevo Proyecto" style="font-size:13px;padding:6px 10px;border-radius:6px;border:0.5px solid #b4b2a9;width:100%"></div>'
+    +'<div class="modal-field"><label>Color</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">'+swatchesNew+'</div><input type="hidden" id="np-color" value="'+PROJ_COLORS[0]+'"></div>',
+    ()=>{
+      const name=document.getElementById('np-name')?.value.trim()||'Nuevo Proyecto';
+      const color=document.getElementById('np-color')?.value||PROJ_COLORS[0];
+      const p=mkProject(name);p.color=color;
+      G.projects.push(p);
+      G.activeProjectId=p.id;
+      viewingGlobalDevs=false;
+      saveState();renderSidebar();render();
+    }
+  );
+  // select first swatch
+  setTimeout(()=>{
+    const swatches=document.querySelectorAll('.color-swatch');
+    if(swatches[0])swatches[0].classList.add('selected');
+  },10);
+}
+
+function selectSwatchNew(c){
+  document.querySelectorAll('.color-swatch').forEach(s=>{s.classList.toggle('selected',s.style.background===c||s.style.backgroundColor===hexToRgb(c));});
+  const inp=document.getElementById('np-color');if(inp)inp.value=c;
+}
+function hexToRgb(hex){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `rgb(${r}, ${g}, ${b})`;}
+
+function renameCurrentProject(){
+  const proj=activeProject();
+  const swatches=PROJ_COLORS.map(c=>'<div class="color-swatch '+(c===proj.color?'selected':'')+'" style="background:'+c+'" onclick="selectSwatchNew(\''+c+'\')"></div>').join('');
+  showModal('Renombrar Proyecto',
+    '<div class="modal-field"><label>Nombre</label><input id="rn-name" value="'+proj.name+'" style="font-size:13px;padding:6px 10px;border-radius:6px;border:0.5px solid #b4b2a9;width:100%"></div>'
+    +'<div class="modal-field"><label>Color</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">'+swatches+'</div><input type="hidden" id="np-color" value="'+proj.color+'"></div>',
+    ()=>{
+      const newName=document.getElementById('rn-name')?.value.trim();
+      const newColor=document.getElementById('np-color')?.value;
+      if(newName)proj.name=newName;
+      if(newColor)proj.color=newColor;
+      saveState();renderSidebar();render();
+      showToast('Proyecto renombrado: '+proj.name,'success');
+    }
+  );
+}
+
+function confirmResetProject(){
+  const proj=activeProject();
+  showModal('Reiniciar proyecto',`Se borrarán todas las tareas de <strong>${proj.name}</strong>.`,()=>{
+    proj.tasks=[];proj.devs=[];
+    saveState();renderSidebar();render();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GLOBAL DEVS VIEW
+// ═══════════════════════════════════════════════════════════════
+function renderGlobalDevsView(){
+  const loads=crossProjectLoad();
+  const pload=projectLoad(activeProject());
+  const totalAvail=G.globalDevs.reduce((s,d)=>s+(d.avail??100),0);
+  const avgAvail=G.globalDevs.length?Math.round(totalAvail/G.globalDevs.length):0;
+
+  let h=`<div style="margin-bottom:1.1rem;background:#fff;border:0.5px solid #d3d1c7;border-radius:10px;padding:18px;">
+    <div class="gd-title">Desarrolladores Globales</div>
+    <div class="gd-sub">Compartidos entre todos los proyectos. La carga cruzada se calcula en tiempo real.</div>
+    <div style="margin-bottom:14px;display:flex;gap:8px;align-items:center;">
+      <button class="add-btn" onclick="addGlobalDev()">+ Agregar dev global</button>
+      <span style="font-size:12px;color:#888780;">Disponibilidad promedio: <strong>${avgAvail}%</strong></span>
+    </div>`;
+
+  if(G.globalDevs.length===0){
+    h+=`<div style="color:#888780;font-size:13px;padding:16px 0;">No hay devs globales. Los devs globales se pueden asignar a cualquier proyecto.</div>`;
+  }else{
+    h+=`<table class="gd-table"><thead><tr>
+      <th>Color</th><th>Nombre</th><th>Email DevOps</th><th>Disponibilidad</th><th>Carga total</th><th>Proyectos activos</th><th></th>
+    </tr></thead><tbody>`;
+    G.globalDevs.forEach(dev=>{
+      const col=gc(dev.pi||0);
+      const load=loads[dev.id]||{hours:0,projects:[]};
+      const totalH=load.hours;
+      const maxH=200;
+      const pct=Math.min(100,Math.round(totalH/maxH*100));
+      const overloaded=totalH>160;
+      h+=`<tr>
+        <td><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${col.bar}"></span></td>
+        <td><input class="dev-name-input" value="${dev.name}" onchange="rnGlobalDev('${dev.id}',this.value)"></td>
+        <td><input class="dev-name-input" style="width:200px;font-size:11px;" placeholder="email@devops.com" value="${dev.devopsEmail||''}" onchange="rnGlobalDevEmail('${dev.id}',this.value)"></td>
+        <td>
+          <div class="avail-wrap">
+            <input type="range" class="avail-slider" min="0" max="100" step="5" value="${dev.avail??100}"
+              oninput="updGlobalDevAvail('${dev.id}',this.value)" style="width:90px">
+            <span class="avail-num" style="color:${(dev.avail??100)<50?'#ba7517':'#1a1a18'}">${dev.avail??100}%</span>
+          </div>
+        </td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="load-bar-wrap">
+              <div class="load-bar" style="width:${pct}%;background:${overloaded?'#e24b4a':col.bar}"></div>
+            </div>
+            <span style="font-size:11px;${overloaded?'color:#e24b4a;font-weight:500':'color:#888780'}">${totalH}h${overloaded?' ⚠':''}</span>
+          </div>
+        </td>
+        <td><span style="font-size:11px;color:#5f5e5a;">${load.projects.length?load.projects.join(', '):'-'}</span></td>
+        <td><button class="dev-del-btn" onclick="delGlobalDev('${dev.id}')">Eliminar</button></td>
+      </tr>`;
+    });
+    h+=`</tbody></table>`;
+  }
+  h+=`</div>`;
+
+  // Cross-project overload warnings
+  const overloads=G.globalDevs.filter(d=>{const l=loads[d.id];return l&&l.hours>160;});
+  if(overloads.length){
+    h+=`<div class="warnings">`;
+    overloads.forEach(d=>{
+      const l=loads[d.id];
+      h+=`<div class="warn-box danger">⚠ <strong>${d.name}</strong> tiene ${l.hours}h asignadas en ${l.projects.join(', ')} — posible sobrecarga entre proyectos.</div>`;
+    });
+    h+=`</div>`;
+  }
+
+  document.getElementById('root').innerHTML=h;
+}
+
+function addGlobalDev(){
+  const used=G.globalDevs.map(d=>d.pi);
+  const next=[0,1,2,3,4,5,6].find(i=>!used.includes(i))??G.globalDevs.length%7;
+  G.globalDevs.push({id:'gd'+Date.now(),name:`GDEV${G.globalDevs.length+1}`,active:true,pi:next,devopsEmail:'',avail:100,global:true});
+  saveState();renderGlobalDevsView();
+}
+function rnGlobalDev(id,v){const d=G.globalDevs.find(x=>x.id===id);if(d){d.name=v;saveState();}}
+function rnGlobalDevEmail(id,v){const d=G.globalDevs.find(x=>x.id===id);if(d){d.devopsEmail=v.trim();saveState();}}
+function updGlobalDevAvail(id,v){
+  const d=G.globalDevs.find(x=>x.id===id);if(!d)return;
+  d.avail=parseInt(v)||0;
+  saveState();
+  renderGlobalDevsView();
+}
+function delGlobalDev(id){
+  showModal('Eliminar dev global','¿Eliminar este desarrollador global?',()=>{
+    G.globalDevs=G.globalDevs.filter(d=>d.id!==id);
+    G.projects.forEach(p=>{
+      p.tasks.forEach(t=>{if(t.pdi===id)t.pdi=null;});
+      if(p.globalDevOverrides)delete p.globalDevOverrides[id];
+    });
+    saveState();renderGlobalDevsView();
+  });
+}
+
+function tgGlobalDevActive(devId,active){
+  const proj=activeProject();
+  if(!proj.globalDevOverrides)proj.globalDevOverrides={};
+  if(!proj.globalDevOverrides[devId])proj.globalDevOverrides[devId]={};
+  proj.globalDevOverrides[devId].active=active;
+  // If deactivating, clear pdi from pending tasks assigned to this dev
+  // and reset so/eo so scheduler re-assigns them to active devs
+  if(!active){
+    proj.tasks.forEach(t=>{
+      if((t.estado==='nuevo'||t.estado==='aprobado')&&t.pdi===devId){
+        t.pdi=null;t.so=null;t.eo=null;t._manualSo=false;t._autoPdi=true;
+      }
+    });
+  }
+  // Full rebalance: reset all pending tasks
+  proj.tasks.forEach(t=>{
+    if(t.estado==='nuevo'||t.estado==='aprobado'){
+      if(!t._manualSo){t.so=null;t.eo=null;t.pdi=null;t._autoPdi=true;}
+      else{t.pdi=null;t._autoPdi=true;}
+    }
+  });
+  saveState();render();
+}
+
+function updGlobalDevProjAvail(devId,v){
+  const proj=activeProject();
+  if(!proj.globalDevOverrides)proj.globalDevOverrides={};
+  if(!proj.globalDevOverrides[devId])proj.globalDevOverrides[devId]={};
+  proj.globalDevOverrides[devId].avail=parseInt(v)||0;
+  // Reset ALL pending tasks (except manually-dated ones) for full rebalance
+  proj.tasks.forEach(t=>{
+    if(t.estado==='nuevo'||t.estado==='aprobado'){
+      if(!t._manualSo){
+        t.so=null;t.eo=null;t.pdi=null;t._autoPdi=true;
+      }
+      // Even manual-date tasks: clear pdi so they get re-evaluated
+      // but keep their date (_manualSo=true protects the date)
+      else{
+        t.pdi=null;t._autoPdi=true;
+      }
+    }
+  });
+  saveState();render();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AVAILABILITY TOTAL for a project's local devs
+// ═══════════════════════════════════════════════════════════════
+function availTotalClass(devs){
+  const act=devs.filter(d=>d.active!==false);
+  if(act.length===0)return'';
+  const total=act.reduce((s,d)=>s+(d.avail??100),0);
+  if(total===100)return'ok';
+  if(total>=90&&total<=110)return'warn';
+  return'error';
+}
+function availTotalVal(devs){
+  const act=devs.filter(d=>d.active!==false);
+  return act.reduce((s,d)=>s+(d.avail??100),0);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DEP DROPDOWN
+// ═══════════════════════════════════════════════════════════════
+function setDep(taskId,depId,projId){
+  const proj=G.projects.find(p=>p.id===projId)||activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+  t.deps=depId?[depId]:[];
+  saveState();render();
+}
+function openDepPopup(e,taskId,projId){
+  e.stopPropagation();
+  const popup=document.getElementById('dep-popup');
+  if(!popup)return;
+  // Toggle
+  if(popup.dataset.task===taskId&&popup.style.display==='block'){
+    popup.style.display='none';popup.dataset.task='';return;
+  }
+  popup.dataset.task=taskId;
+  popup.dataset.proj=projId;
+  const proj=G.projects.find(p=>p.id===projId)||activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);
+  if(!t){popup.style.display='none';return;}
+  const oT=proj.tasks.filter(x=>x.id!==taskId);
+  const noneChk=t.deps.length===0?'checked':'';
+  let html='<label style="border-bottom:0.5px solid #eee;margin-bottom:2px;padding-bottom:4px;display:flex;align-items:center;gap:7px;">'
+    +'<input type="checkbox" '+noneChk+' data-action="clear" data-task="'+taskId+'" data-proj="'+projId+'"> ninguna</label>';
+  oT.forEach(ot=>{
+    const chk=t.deps.includes(ot.id)?'checked':'';
+    html+='<label><input type="checkbox" '+chk+' data-action="toggle" data-task="'+taskId+'" data-dep="'+ot.id+'" data-proj="'+projId+'"> '+ot.id+'</label>';
+  });
+  popup.innerHTML=html;
+  popup.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change',function(){
+      if(this.dataset.action==='clear') clearDeps(this.dataset.task,this.dataset.proj);
+      else toggleDep(this.dataset.task,this.dataset.dep,this.checked,this.dataset.proj);
+    });
+  });
+  // Position
+  const r=e.currentTarget.getBoundingClientRect();
+  const below=window.innerHeight-r.bottom-8;
+  const above=r.top-8;
+  popup.style.display='block';
+  popup.style.left=r.left+'px';
+  popup.style.minWidth=Math.max(160,r.width)+'px';
+  if(below>=150||below>=above){
+    popup.style.top=(r.bottom+2)+'px';
+    popup.style.bottom='auto';
+    popup.style.maxHeight=Math.min(250,Math.max(100,below))+'px';
+  } else {
+    popup.style.bottom=(window.innerHeight-r.top+2)+'px';
+    popup.style.top='auto';
+    popup.style.maxHeight=Math.min(250,Math.max(100,above))+'px';
+  }
+}
+function toggleDep(taskId,depId,checked,projId){
+  const proj=G.projects.find(p=>p.id===projId)||activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+  if(checked){if(!t.deps.includes(depId))t.deps.push(depId);}
+  else t.deps=t.deps.filter(d=>d!==depId);
+  saveState();
+  // Update button label without full render
+  const btn=document.querySelector('.dep-btn[onclick*="'+taskId+'"]');
+  if(btn){const l=t.deps.length===0?'ninguna':t.deps.length===1?t.deps[0]:t.deps.length+' deps';btn.textContent=l+' ▾';btn.title=t.deps.join(', ')||'ninguna';}
+  // Update ninguna checkbox
+  const popup=document.getElementById('dep-popup');
+  if(popup){const nc=popup.querySelector('input[type=checkbox]');if(nc)nc.checked=t.deps.length===0;}
+}
+function clearDeps(taskId,projId){
+  const proj=G.projects.find(p=>p.id===projId)||activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+  t.deps=[];saveState();
+  const btn=document.querySelector('.dep-btn[onclick*="'+taskId+'"]');
+  if(btn){btn.textContent='ninguna ▾';btn.title='ninguna';}
+  const popup=document.getElementById('dep-popup');
+  if(popup){popup.querySelectorAll('input[type=checkbox]').forEach((cb,i)=>{cb.checked=i===0;});}
+}
+
+function setDepMulti(taskId,sel,projId){
+  const proj=G.projects.find(p=>p.id===projId)||activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+  const vals=Array.from(sel.selectedOptions).map(o=>o.value).filter(v=>v!=='');
+  t.deps=vals;
+  saveState();render();
+}
+function tgDep(taskId,depId,chk,projId){
+  const proj=G.projects.find(p=>p.id===projId)||activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+  if(chk){if(!t.deps.includes(depId))t.deps.push(depId);}
+  else t.deps=t.deps.filter(d=>d!==depId);
+  openDrop='dep-'+taskId;saveState();render();
+}
+
+
+
+
+
+function getFilterValues(proj,field){
+  if(!proj.filters)proj.filters={estado:[],id:[],name:[],dev:[]};
+  const val=proj.filters[field];
+  return Array.isArray(val)?val:((val&&String(val).trim()!=='')?[String(val)]:[]);
+}
+
+function taskMatchesFilters(task,proj){
+  const estados=getFilterValues(proj,'estado');
+  const ids=getFilterValues(proj,'id');
+  const names=getFilterValues(proj,'name');
+  const devs=getFilterValues(proj,'dev');
+  const devName=task.adev?.name||dByI(task.pdi,proj)?.name||'';
+  const okEstado=!estados.length||estados.includes(task.estado);
+  const okId=!ids.length||ids.includes(task.id||'');
+  const okName=!names.length||names.includes(task.name||'');
+  const okDev=!devs.length||devs.includes(devName);
+  return okEstado&&okId&&okName&&okDev;
+}
+
+function getFilterOptions(field,proj,sch){
+  const vals=[];
+  sch.forEach(t=>{
+    if(field==='estado') vals.push(t.estado);
+    else if(field==='id') vals.push(t.id||'');
+    else if(field==='name') vals.push(t.name||'');
+    else if(field==='dev') vals.push(t.adev?.name||dByI(t.pdi,proj)?.name||'');
+  });
+  return [...new Set(vals.filter(v=>String(v).trim()!==''))].sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true,sensitivity:'base'}));
+}
+
+function filterButtonLabel(field,proj){
+  const vals=getFilterValues(proj,field);
+  if(!vals.length)return 'Todos ▾';
+  if(vals.length===1){
+    const v=vals[0];
+    const label=field==='estado'
+      ? ({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'}[v]||v)
+      : v;
+    return label+' ▾';
+  }
+  return vals.length+' seleccionados ▾';
+}
+
+function openFilterPopup(e,field){
+  e.stopPropagation();
+  const popup=document.getElementById('filter-popup');
+  if(!popup)return;
+  const proj=activeProject();
+  const sch=sched(proj).sch;
+  const options=getFilterOptions(field,proj,sch);
+  const selected=getFilterValues(proj,field);
+
+  if(popup.dataset.field===field&&popup.style.display==='block'){
+    popup.style.display='none';
+    popup.dataset.field='';
+    return;
+  }
+
+  popup.dataset.field=field;
+  let html='<label style="border-bottom:0.5px solid #eee;margin-bottom:2px;padding-bottom:4px;display:flex;align-items:center;gap:7px;"><input type="checkbox" '+(selected.length===0?'checked':'')+' data-action="clear" data-field="'+field+'"> todos</label>';
+  if(!options.length){
+    html+='<div class="filter-empty">Sin opciones</div>';
+  }else{
+    options.forEach(opt=>{
+      const checked=selected.includes(opt)?'checked':'';
+      const label=field==='estado'?({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'}[opt]||opt):opt;
+      html+='<label><input type="checkbox" '+checked+' data-action="toggle" data-field="'+field+'" data-value="'+String(opt).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"> '+label+'</label>';
+    });
+  }
+  popup.innerHTML=html;
+  popup.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change',function(){
+      const field=this.dataset.field;
+      if(this.dataset.action==='clear')clearFilterField(field);
+      else toggleFilterValue(field,this.dataset.value,this.checked);
+    });
+  });
+
+  const r=e.currentTarget.getBoundingClientRect();
+  const below=window.innerHeight-r.bottom-8;
+  const above=r.top-8;
+  popup.style.display='block';
+  popup.style.left=r.left+'px';
+  popup.style.minWidth=Math.max(180,r.width)+'px';
+  if(below>=160||below>=above){
+    popup.style.top=(r.bottom+2)+'px';
+    popup.style.bottom='auto';
+    popup.style.maxHeight=Math.min(260,Math.max(100,below))+'px';
+  }else{
+    popup.style.bottom=(window.innerHeight-r.top+2)+'px';
+    popup.style.top='auto';
+    popup.style.maxHeight=Math.min(260,Math.max(100,above))+'px';
+  }
+}
+
+function toggleFilterValue(field,value,checked){
+  const proj=activeProject();
+  const vals=getFilterValues(proj,field).slice();
+  const idx=vals.indexOf(value);
+  if(checked&&idx===-1)vals.push(value);
+  if(!checked&&idx!==-1)vals.splice(idx,1);
+  proj.filters[field]=vals;
+  saveState();
+  render();
+}
+
+function clearFilterField(field){
+  const proj=activeProject();
+  if(!proj.filters)proj.filters={estado:[],id:[],name:[],dev:[]};
+  proj.filters[field]=[];
+  saveState();
+  render();
+}
+
+function clearFilters(){
+  const proj=activeProject();
+  proj.filters={estado:[],id:[],name:[],dev:[]};
+  saveState();
+  render();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN RENDER
+// ═══════════════════════════════════════════════════════════════
+function render(){
+  if(viewingGlobalDevs){renderGlobalDevsView();return;}
+  try{
+  const proj=activeProject();
+  const{sch,df}=sched(proj);
+  const displaySch=displaySortedTasks(sch);
+  const filteredSch=displaySch.filter(t=>taskMatchesFilters(t,proj));
+  const timelineSource=(filteredSch.length?filteredSch:displaySch);
+  const allD=timelineSource.flatMap(t=>[t.start,t.end]).filter(Boolean);
+  const now=parseDate(proj.globalStart);
+  const pad_placeholder=null;
+  const minD=allD.length?new Date(Math.min(...allD.map(d=>d.getTime()))):now;
+  const maxD=allD.length?new Date(Math.max(...allD.map(d=>d.getTime()))):new Date(now.getFullYear(),now.getMonth()+3,now.getDate());
+  const pad=norm(new Date(maxD));pad.setDate(pad.getDate()+3);
+  const cd=calDays(minD,pad),ms=mSpans(cd),tcp=cd.length*DAY_PX,tpx=pxL(TODAY,minD);
+  const backlogH=proj.tasks.filter(t=>t.estado==='nuevo').reduce((s,t)=>s+taskCountableHours(t),0);
+  const committedH=proj.tasks.filter(t=>t.estado!=='nuevo').reduce((s,t)=>s+taskCountableHours(t),0);
+  const completedCommittedH=proj.tasks.filter(t=>t.estado==='completado').reduce((s,t)=>s+taskCountableHours(t),0);
+  const remainingCommittedH=Math.max(0,committedH-completedCommittedH);
+  const tH=committedH,tW=Math.ceil(wdB(minD,maxD)/5);
+  const aS=sch.filter(t=>t.estado!=='completado'&&t.estado!=='pausa_cliente'&&t.estado!=='pruebas_cliente');
+  const realUsage=calcProjectRealUsage(proj);
+  const devs=allDevs(proj);
+  const aD=devs.filter(d=>d.active!==false);
+  const doOk=devopsConfigured(proj);
+  const loads=crossProjectLoad();
+  const pload=projectLoad(proj);
+
+  // Availability sum — use global devs with per-project overrides
+  const ov=proj.globalDevOverrides||{};
+  const activeGlobals=G.globalDevs.map(d=>({...d,...(ov[d.id]||{})})).filter(d=>d.active!==false);
+  const availSum=activeGlobals.reduce((s,d)=>s+(d.avail??100),0);
+  const availClass=activeGlobals.length===0?'':availSum===100?'ok':availSum>=90&&availSum<=110?'warn':'error';
+
+  // Warnings
+  const W=[];
+  const dt2={};devs.forEach(d=>dt2[d.id]=[]);
+  sch.forEach(t=>{if(t.adev&&dt2[t.adev.id]!==undefined)dt2[t.adev.id].push(t);});
+  devs.forEach(dev=>{
+    const dt=dt2[dev.id].filter(t=>t.estado!=='completado').sort((a,b)=>norm(a.start)-norm(b.start));
+    for(let i=0;i<dt.length-1;i++){
+      // Overlap: task i ends AFTER task i+1 starts (both inclusive end dates)
+      // With Opción A: end=last workday, start=first workday
+      // Overlap if norm(end_i) >= norm(start_i+1)
+      if(norm(dt[i].end)>=norm(dt[i+1].start)){
+        // Only alert if SAME dev has overlapping tasks
+        // Different devs working simultaneously is perfectly fine
+        W.push({type:'danger',msg:`⚠ Solapamiento en <b>${dev.name}</b>: ${dt[i].id} (fin ${dt[i].eo||iso(dt[i].end)}) se solapa con ${dt[i+1].id} (inicio ${dt[i+1].so||iso(dt[i+1].start)}).`});
+      }
+    }
+    const isActive=aD.find(d=>d.id===dev.id);
+    if(isActive&&!sch.filter(t=>t.estado!=='completado').some(t=>t.adev?.id===dev.id))W.push({type:'warning',msg:`${dev.name} no tiene ningún desarrollo asignado.`});
+    // Cross-project overload
+    const l=loads[dev.id];
+    if(l&&l.hours>160&&l.projects.length>1){
+      const others=l.projects.filter(n=>n!==proj.name);
+      W.push({type:'danger',msg:`${dev.name} tiene carga cruzada en: ${others.join(', ')} (total ${l.hours}h)`});
+    }
+  });
+
+  if(W.length===0)W.push({type:'success',msg:'Sin alertas. El plan está dentro de los parámetros esperados.'});
+
+  let h=`
+  <div class="panel">
+    <div class="panel-header" onclick="togglePanel('devops-body')">
+      <div class="panel-title">
+        <svg width="14" height="14" viewBox="0 0 32 32" fill="none"><path d="M29.744 12.208L26.032 4.432C25.584 3.552 24.672 3 23.68 3H8.32C7.328 3 6.416 3.552 5.968 4.432L2.256 12.208C1.808 13.088 1.888 14.128 2.48 14.928L15.2 30.272C15.584 30.736 16.16 31 16.768 31H16.8C17.408 31 17.968 30.736 18.368 30.272L31.52 14.928C32.112 14.128 32.192 13.088 29.744 12.208Z" fill="#0078d4"/></svg>
+        Azure DevOps
+        <span class="${doOk?'devops-connected':'devops-disconnected'}">${doOk?'● Conectado':'○ No configurado'}</span>
+      </div>
+      <button class="collapse-btn" data-panel="devops-body" onclick="event.stopPropagation();togglePanel('devops-body')">▼ Mostrar</button>
+    </div>
+    <div class="panel-body collapsed" id="devops-body">
+      <div class="devops-fields">
+        <div class="devops-field"><label>URL Organización</label><input id="do-org" placeholder="https://dev.azure.com/MiOrg" value="${proj.devops.org||''}" onblur="saveDevopsConfig()"></div>
+        <div class="devops-field"><label>Proyecto</label><input id="do-proj" class="short" placeholder="NombreProyecto" value="${proj.devops.project||''}" onblur="saveDevopsConfig()"></div>
+        <div class="devops-field"><label>PAT</label><input id="do-pat" class="pat-input" type="password" placeholder="••••••••••••" value="${proj.devops.pat||''}" onblur="saveDevopsConfig()"></div>
+        <div class="devops-field"><label>Área (opcional)</label><input id="do-area" class="short" value="${proj.devops.areaPath||''}" onblur="saveDevopsConfig()"></div>
+        <div class="devops-field"><label>Iteración (opcional)</label><input id="do-iter" class="short" value="${proj.devops.iterationPath||''}" onblur="saveDevopsConfig()"></div>
+        <div class="devops-field"><label>&nbsp;</label>
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#5f5e5a;cursor:pointer;" onclick="toggleAutoSync()">
+            <div class="toggle-switch ${proj.devops.autoSync?'on':''}"></div>
+            Sincronizar estado automáticamente
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:#888780;">
+        PAT guardado en localStorage. Permisos: <strong>Work Items — Read &amp; Write</strong>.
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <span style="font-size:11px;color:#5f5e5a">Tipo WI:</span>
+		  <button onclick="fetchWITypes()" style="font-size:11px;padding:3px 8px;border-radius:6px;cursor:pointer;border:0.5px solid #b4b2a9;background:#f1efe8;color:#5f5e5a;">⟳ Tipos</button>
+          <select id="do-witype" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:120px;" onchange="saveDevopsConfig()">
+			  <option value="${proj.devops.wiType||'Task'}" selected>${proj.devops.wiType||'Task'}</option>
+			</select>
+          <span style="font-size:11px;color:#5f5e5a">Nuevo→</span>
+          <input id="do-st-new" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:90px;background:#f5f5f3;" value="${proj.devops.stNuevo||'New'}" onblur="saveDevopsConfig()" readonly disabled>
+          <span style="font-size:11px;color:#5f5e5a">Aprobado→</span>
+          <input id="do-st-approved" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stAprobado||'Approved'}" onblur="saveDevopsConfig()" readonly disabled>
+          <span style="font-size:11px;color:#5f5e5a">En desarrollo→</span>
+          <input id="do-st-dev" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stEnDesarrollo||'Doing'}" onblur="saveDevopsConfig()" readonly disabled>
+          <span style="font-size:11px;color:#5f5e5a">Pausado→</span>
+          <input id="do-st-pause" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stPausaCliente||'On Hold'}" onblur="saveDevopsConfig()" readonly disabled>
+          <span style="font-size:11px;color:#5f5e5a">Probando→</span>
+          <input id="do-st-clienttest" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:120px;background:#f5f5f3;" value="${proj.devops.stPruebasCliente||'Client Testing'}" onblur="saveDevopsConfig()" readonly disabled>
+          <span style="font-size:11px;color:#5f5e5a">Completado→</span>
+          <input id="do-st-done" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stCompletado||'Done'}" onblur="saveDevopsConfig()" readonly disabled>
+          <span style="font-size:11px;color:#5f5e5a">En Garantía→</span>
+          <input id="do-st-warranty" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stEnGarantia||'Warranty'}" onblur="saveDevopsConfig()" readonly disabled>
+          <button onclick="testConnection()" id="btn-test-conn" style="font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;border:0.5px solid #0078d4;background:#e6f1fb;color:#0078d4;">Probar conexión</button>
+          <button onclick="fetchWIStates()" style="font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;border:0.5px solid #b4b2a9;background:#f1efe8;color:#5f5e5a;">⟳ Consultar estados</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <label>Inicio global: <input type="date" value="${proj.globalStart}" onchange="ug('globalStart',this.value)"></label>
+    <label>Horas/día: <input type="number" value="${proj.hpd}" min="4" max="12" style="width:54px" onchange="ug('hpd',parseInt(this.value)||8)"></label>
+    <button class="hbtn" type="button" onclick="clearFilters()">Limpiar filtros</button>
+    <span style="font-size:12px;color:#888780;">Mostrando ${filteredSch.length} de ${sch.length}</span>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header" onclick="togglePanel('devmgr-body')">
+      <div class="panel-title">
+        Gestión de desarrolladores
+
+      </div>
+      <button class="collapse-btn" data-panel="devmgr-body" onclick="event.stopPropagation();togglePanel('devmgr-body')">▼ Mostrar</button>
+    </div>
+    <div class="panel-body collapsed" id="devmgr-body">`;
+
+  if(G.globalDevs.length===0){
+    h+=`<div style="color:#888780;font-size:12px;padding:6px 0;">No hay desarrolladores. <button class="dev-add-btn" onclick="showGlobalDevs()" style="border-color:#378ADD;color:#0c447c;">Agregar desarrolladores</button></div>`;
+  }else{
+    if(!proj.globalDevOverrides)proj.globalDevOverrides={};
+    G.globalDevs.forEach(dev=>{
+      const col=gc(dev.pi||0);
+      const l=loads[dev.id]||{hours:0,projects:[]};
+      const isOverloaded=l.hours>160&&l.projects.length>1;
+      const devOv=proj.globalDevOverrides[dev.id]||{};
+      const projAvail=devOv.avail!==undefined?devOv.avail:dev.avail??100;
+      const projActive=devOv.active!==undefined?devOv.active:true;
+      h+=`<div class="dev-row" style="opacity:${projActive?1:0.45}">
+        <span class="dev-color-dot" style="background:${col.bar}"></span>
+        <span style="font-size:12px;min-width:140px;font-weight:500;">${dev.name}</span>
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px;color:#5f5e5a;cursor:pointer;">
+          <input type="checkbox" ${projActive?'checked':''} onchange="tgGlobalDevActive('${dev.id}',this.checked)"> Activo en proyecto
+        </label>
+        <div class="avail-wrap" style="${projActive?'':'opacity:0.4;pointer-events:none'}">
+          <input type="range" class="avail-slider" min="0" max="100" step="5" value="${projAvail}"
+            oninput="updGlobalDevProjAvail('${dev.id}',this.value)">
+          <span class="avail-num" style="color:${projAvail<50?'#ba7517':'#1a1a18'}">${projAvail}%</span>
+        </div>
+        <span style="font-size:11px;color:#888780;">${pload[dev.id]||0}h en proyecto${isOverloaded?' ⚠ cruzado':''}</span>
+        ${isOverloaded?'<span class="overload-badge">Sobrecarga cruzada</span>':''}
+      </div>`;
+    });
+  }
+
+  h+=`<div style="margin-top:10px;">
+    <button class="dev-add-btn" onclick="showGlobalDevs()" style="border-color:#378ADD;color:#0c447c;">⚙ Gestionar desarrolladores</button>
+  </div></div></div>
+
+  <div class="summary">
+    <div class="sc"><div class="sc-label">Inicio</div><div class="sc-val" style="font-size:13px">${fmt(minD)}</div></div>
+    <div class="sc"><div class="sc-label">Fin estimado</div><div class="sc-val" style="font-size:13px">${fmt(maxD)}</div></div>
+    <div class="sc"><div class="sc-label">Duración</div><div class="sc-val">${wdB(minD,maxD)}</div><div class="sc-sub">días · ${tW} sem.</div></div>
+    <div class="sc"><div class="sc-label">Completados</div><div class="sc-val">${sch.filter(t=>t.estado==='completado').length}<span style="font-size:12px;color:#888780">/${sch.length}</span></div></div>
+    <div class="sc"><div class="sc-label">En desarrollo</div><div class="sc-val">${sch.filter(t=>t.estado==='en_desarrollo').length}</div></div>
+    <div class="sc"><div class="sc-label">Horas Backlog</div><div class="sc-val">${backlogH}</div><div class="sc-sub">estado Nuevo</div></div>
+    <div class="sc"><div class="sc-label">Horas Comprometidas</div><div class="sc-val">${committedH}</div><div class="sc-sub">Aprobado+</div></div>
+    <div class="sc"><div class="sc-label">Horas restantes</div><div class="sc-val">${remainingCommittedH}</div><div class="sc-sub">comprometidas - completadas</div></div>
+    <div class="sc"><div class="sc-label">Horas consumidas reales</div><div class="sc-val">${realUsage.hoursReal}</div><div class="sc-sub">${realUsage.doneCount} cerradas</div></div>
+    <div class="sc" style="min-width:170px"><div class="sc-label">Horas remanentes</div><div class="sc-val">${realUsage.remainingReal}</div><div style="margin-top:4px;font-size:9px;color:#888780;line-height:1.2"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center;font-weight:500;"><span>H.Dev</span><span>H.Test</span><span>Gar</span></div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center;color:#5f5e5a;margin-top:2px;"><span>${realUsage.remDev}</span><span>${realUsage.remTest}</span><span>${realUsage.remGar}</span></div></div><div class="sc-sub">solo cerradas</div></div>
+    <div class="sc"><div class="sc-label">WI vinculados</div><div class="sc-val">${proj.tasks.filter(t=>t.wiId).length}<span style="font-size:12px;color:#888780">/${proj.tasks.length}</span></div></div>
+  </div>
+
+  <div class="dev-status">`;
+
+  aD.forEach(dev=>{
+    const col=gc(dev.pi||0);
+    const cur=aS.find(t=>t.adev?.id===dev.id&&t.start<=TODAY&&t.end>=TODAY);
+    const nxt=aS.filter(t=>t.adev?.id===dev.id&&t.start>TODAY).sort((a,b)=>a.start-b.start)[0];
+    const fr=df[dev.id]&&df[dev.id]<=TODAY;
+    const l=loads[dev.id];
+    h+=`<div class="dev-card" style="border-top:3px solid ${col.bar}">
+      <div class="dc-name" style="color:${col.bar}">${dev.name}</div>
+      <div class="dc-status">${fr?'<span style="color:#1d9e75">● Disponible</span>':cur?`<span style="color:#378add">● En ${cur.id}</span>`:`<span style="color:#ba7517">● Libre ${df[dev.id]?fmt(df[dev.id]):'?'}</span>`}</div>
+      <div class="dc-avail" style="color:${(dev.avail??100)<50?'#ba7517':'#888780'}">⬡ ${dev.avail??100}% disponibilidad</div>
+      <div class="dc-next">${nxt?`Próximo: ${nxt.id} (${fmt(nxt.start)})`:'Sin tareas siguientes'}</div>
+      ${(()=>{
+        if(!cur)return '';
+        const hpd=proj.hpd||8;
+        const delayHours=taskDelayHours(cur,proj);
+        const testDaysHours=taskTestDaysHours(cur,proj);
+        const hDevTest=((cur.hDev||0)+(cur.hTest||0)+delayHours+testDaysHours);
+        const hGen=((cur.hDev||0)+(cur.hTest||0)+(cur.garantia||0)+delayHours+testDaysHours);
+        if(!hDevTest||!cur.so)return '';
+
+        const diasDev=Math.max(1,Math.ceil(hDevTest/hpd));
+        const diasGen=Math.max(1,Math.ceil(Math.max(1,hGen)/hpd));
+        const inicio=parseDate(cur.so);
+
+        let diasTranscurridos=0;
+        if(TODAY>=inicio){
+          diasTranscurridos=wdB(inicio,TODAY)+(isWD(inicio)?1:0);
+        }
+
+        const horasConsumidas=diasTranscurridos*hpd;
+        const pctDev=Math.min(100,Math.round(horasConsumidas/hDevTest*100));
+        const pctGen=Math.min(100,Math.round(horasConsumidas/Math.max(1,hGen)*100));
+
+        const colorDev=pctDev>=100?'#e24b4a':pctDev>=75?'#ba7517':'#1d9e75';
+        const colorGen=pctGen>=100?'#e24b4a':pctGen>=75?'#ba7517':'#1d9e75';
+
+        return ''
+          + '<div style="font-size:11px;margin-top:3px;color:'+colorDev+';font-weight:500;">⬡ Avance dev: '+pctDev+'% <span style="color:#888780;font-weight:400;">(día '+diasTranscurridos+'/'+diasDev+')</span></div>'
+          + '<div style="font-size:11px;margin-top:2px;color:'+colorGen+';font-weight:500;">⬡ Avance Gen: '+pctGen+'% <span style="color:#888780;font-weight:400;">(día '+diasTranscurridos+'/'+diasGen+')</span></div>';
+      })()}
+      ${l&&l.hours>0&&G.globalDevs.find(x=>x.id===dev.id)?'<div style="font-size:11px;color:#5f5e5a;margin-top:2px;">Total cruzado: '+l.hours+'h</div>':''}
+    </div>`;
+  });
+
+  h+=`</div>
+  <div class="warnings">${W.map(w=>`<div class="warn-box ${w.type}">${w.type==='danger'?'✕':w.type==='warning'?'⚠':w.type==='info'?'ℹ':'✓'} ${w.msg}</div>`).join('')}</div>
+  <div class="legend" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:.75rem;font-size:12px;color:#5f5e5a;align-items:center;">
+    ${devs.map(d=>'<span style="display:flex;align-items:center;gap:5px;'+(d.active===false?'opacity:0.4':'')+'">'+'<span style="width:10px;height:10px;border-radius:2px;background:'+gc(d.pi||0).bar+';display:inline-block;"></span>'+d.name+'</span>').join('')}
+    <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:2px;background:#e24b4a;display:inline-block;"></span>Hoy</span>
+    <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;background:#faeeda;border-radius:2px;display:inline-block;"></span>Feriado</span>
+  </div>
+  <div class="left-scroll-wrap">
+  <table class="gantt-table-split">
+    <thead><tr>
+      <th class="sk" style="width:108px;left:0px">Estado</th>
+      <th class="sk" style="width:88px;left:108px">ID</th>
+      <th style="min-width:138px">Nombre</th>
+      <th style="width:52px;text-align:center">P</th>
+      <th style="width:52px;text-align:center">H.Dev</th>
+      <th style="width:52px;text-align:center">H.Test</th>
+      <th style="width:52px;text-align:center">Gar.</th>
+      <th style="width:56px;text-align:center;background:#eef2fb;color:#0c447c" title="H.Gen = H.Dev+H.Test+Gar">H.Gen</th>
+      <th style="width:32px;text-align:center">Días</th>
+      <th style="width:72px;text-align:center">D.Ret.</th>
+      <th style="width:72px;text-align:center">D.Pru.</th>
+      <th style="width:128px">Dev</th>
+      <th style="width:118px">Inicio</th>
+      <th style="width:118px">Fin</th>
+      <th style="width:100px">Depende de</th>
+      <th style="width:110px">Work Item</th>
+      <th style="width:26px"></th>
+      <th style="width:${tcp}px;padding:0;vertical-align:top;border-left:1.5px solid #d3d1c7;">
+        <table style="width:100%;border-collapse:collapse;font-size:10px;"><tr>
+          ${ms.map(m=>'<td colspan="'+m.n+'" style="background:#f1efe8;color:#5f5e5a;font-weight:500;text-align:center;padding:3px 2px;border-right:0.5px solid #d3d1c7;border-bottom:0.5px solid #d3d1c7;white-space:nowrap;overflow:hidden;">'+m.label+'</td>').join('')}
+        </tr><tr>
+          ${cd.map(d=>{
+            const iT=iso(d)===iso(TODAY);
+            const iH=HOL.has(iso(d));
+            const iW=d.getDay()===0||d.getDay()===6;
+            const bg=iT?'#fcebeb':iH?'#faeeda':iW?'#f0efe8':'#fff';
+            const cl=iT?'#e24b4a':iH?'#ba7517':'#b4b2a9';
+            const fw=iT||iH?'600':'400';
+            return '<td class="gantt-day-cell" data-date="'+iso(d)+'" style="width:'+DAY_PX+'px;text-align:center;padding:2px 0;font-size:9px;border-right:0.5px solid #d3d1c7;border-bottom:0.5px solid #d3d1c7;background:'+bg+';color:'+cl+';font-weight:'+fw+';">'+d.getDate()+'</td>';
+          }).join('')}
+        </tr></table>
+      </th>
+      </tr>
+      <tr>
+        <th class="sk" style="left:0px"><button class="filter-btn" onclick="openFilterPopup(event,'estado')" title="Filtrar Estado">${filterButtonLabel('estado',proj)}</button></th>
+        <th class="sk" style="left:108px"><button class="filter-btn" onclick="openFilterPopup(event,'id')" title="Filtrar ID">${filterButtonLabel('id',proj)}</button></th>
+        <th><button class="filter-btn" onclick="openFilterPopup(event,'name')" title="Filtrar Nombre" style="max-width:128px;min-width:128px;">${filterButtonLabel('name',proj)}</button></th>
+        <th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th>
+        <th><button class="filter-btn" onclick="openFilterPopup(event,'dev')" title="Filtrar Dev" style="max-width:138px;min-width:138px;">${filterButtonLabel('dev',proj)}</button></th>
+        <th></th><th></th><th></th><th></th><th></th><th></th>
+      </tr></thead><tbody>`;
+
+  filteredSch.forEach(t=>{
+    const col=gc(t.adev?.pi||0);
+    const bg=t.estado==='completado'?'#16A34A':col.bar,fg=t.estado==='completado'?'#ffffff':col.text;
+
+
+    const dOptPool=(t.estado==='nuevo'||t.estado==='aprobado')?aD:devs;
+    const dOpts=dOptPool.map(d=>`<option value="${d.id}" ${(t.pdi||t.adev?.id)===d.id?'selected':''}>${d.name}</option>`).join('');
+    const oT=proj.tasks.filter(x=>x.id!==t.id);
+    const dLbl=t.deps.length===0?'ninguna':t.deps.length===1?t.deps[0]:`${t.deps.length} deps`;
+    const dId=`dep-${t.id}`;
+    const sDis=t.estado==='completado',eDis=false,vDis=locked(t),devDis=locked(t);
+    const eoDisplay=t.estado==='completado'?(t.eoReal||t.eo||t.eoPlan||iso(t.end)):(t.eo||t.eoPlan||iso(t.end));
+    const hOs=(t.so||t.start)&&canSo(t),hOe=(t.estado!=='completado')&&(t.eo||t.eoPlan||t.end);
+    const projId=proj.id;
+    const devAvail=t.adev?.avail??100;
+    const delayDays=Math.max(0,parseInt(t.delayDays)||0);
+    const testDays=Math.max(0,parseInt(t.testDays)||0);
+    const baseDays=Math.ceil(taskBaseHours(t)/(proj.hpd||8));
+    const availAffected=(t.estado==='nuevo'||t.estado==='aprobado')&&devAvail<100;
+    const daysTip=availAffected?`title="Base: ${baseDays}d + retraso ${delayDays}d + pruebas ${testDays}d"`:'';
+
+    // WI cell
+    let wiCell='';
+    if(t.wiCreating)wiCell=`<span class="wi-badge creating">⏳ Creando...</span>`;
+    else if(t.wiError)wiCell=`<span class="wi-badge error">✕ Error</span><button class="wi-sync-btn" onclick="createWI('${t.id}')">↺</button>`;
+    else if(t.wiId){
+      const url=wiUrl(t.id,proj);
+      wiCell=`<a class="wi-badge" href="${url}" target="_blank">#${t.wiId} ↗</a>
+              <button class="wi-sync-btn" onclick="manualSyncWI('${t.id}')">↺</button>
+              <button class="wi-sync-btn" onclick="unlinkWI('${t.id}')" style="color:#a32d2d;border-color:#f09595;">✕</button>`;
+    }else{
+      const _dis=!doOk?'opacity:0.5;cursor:not-allowed':'';
+      wiCell='<button class="wi-sync-btn" style="min-width:60px;'+_dis+'" '+(doOk?'onclick="createWI(this.dataset.id)"':'')+' data-id="'+t.id+'" title="'+(doOk?'Crear WI':'Configura DevOps primero')+'">+ Nuevo</button>'
+        +'<button class="wi-sync-btn" style="'+_dis+'" '+(doOk?'onclick="linkExistingWI(this.dataset.id)"':'')+' data-id="'+t.id+'" title="'+(doOk?'Vincular existente':'Configura DevOps primero')+'"># Vincular</button>';
+    }
+
+    const depLbl=t.deps.length===0?'ninguna':t.deps.length===1?t.deps[0]:`${t.deps.length} deps`;
+    const dd=`<td style="padding:2px 4px;">
+      <button class="dep-btn" onclick="openDepPopup(event,'${t.id}','${projId}')" title="${t.deps.join(', ')||'ninguna'}">${depLbl} ▾</button>
+    </td>`;
+
+    h+=`<tr class="${t.estado==='completado'?'row-completado':''}">
+      <td class="sk" style="left:0">
+        <select class="estado-select estado-${t.estado}" data-taskid="${t.id}">
+          <option value="nuevo" ${t.estado==='nuevo'?'selected':''}>Nuevo</option>
+          <option value="aprobado" ${t.estado==='aprobado'?'selected':''}>Aprobado</option>
+          <option value="en_desarrollo" ${t.estado==='en_desarrollo'?'selected':''}>En desarrollo</option>
+          <option value="pausa_cliente" ${t.estado==='pausa_cliente'?'selected':''}>Pausado</option>
+          <option value="pruebas_cliente" ${t.estado==='pruebas_cliente'?'selected':''}>Probando</option>
+          <option value="completado" ${t.estado==='completado'?'selected':''}>Completado</option>
+          <option value="en_garantia" ${t.estado==='en_garantia'?'selected':''}>En Garantía</option>
+        </select>
+      </td>
+      <td class="sk" style="left:108px"><input class="ce" style="width:80px;font-weight:500" value="${t.id}" onchange="sfId('${t.id}',this.value)" ${vDis?'disabled':''}></td>
+      <td><input class="ce" style="min-width:128px" value="${t.name}" onchange="sf('${t.id}','name',this.value)" ${vDis?'disabled':''}>${hOs||hOe?'<span class="ov-dot"></span>':''}</td>
+      <td style="text-align:center"><input class="ce-pri" type="number" min="1" value="${t.pri}" onkeydown="priKeydown(event,'${t.id}')" onblur="priBlu(event,'${t.id}')" ${vDis?'disabled':''}></td>
+      <td style="text-align:center"><input class="ce" style="width:48px;text-align:center" type="number" min="0" value="${t.hDev||0}" onchange="sfH('${t.id}','hDev',this.value)" ${vDis?'disabled':''}></td>
+      <td style="text-align:center"><input class="ce" style="width:48px;text-align:center" type="number" min="0" value="${t.hTest||0}" onchange="sfH('${t.id}','hTest',this.value)" ${vDis?'disabled':''}></td>
+      <td style="text-align:center"><input class="ce" style="width:48px;text-align:center" type="number" min="0" value="${t.garantia||0}" onchange="sfH('${t.id}','garantia',this.value)" ${vDis?'disabled':''}></td>
+      <td style="text-align:center;background:#eef2fb;color:#0c447c;font-weight:600">${taskBaseHours(t)}</td>
+      <td style="text-align:center;color:${availAffected?'#ba7517':'#888780'}" ${daysTip}>${t.days}${availAffected?'<span style="font-size:9px;margin-left:1px;">⚡</span>':''}</td>
+      <td style="text-align:center"><input class="ce" type="number" min="0" style="width:56px;text-align:center" value="${delayDays}" onchange="sf('${t.id}','delayDays',this.value)" ${sDis?'disabled':''}></td>
+      <td style="text-align:center"><input class="ce" type="number" min="0" style="width:56px;text-align:center" value="${testDays}" onchange="sf('${t.id}','testDays',this.value)" ${sDis?'disabled':''}></td>
+      <td><select class="cs dev-select" data-taskid="${t.id}" ${devDis?'disabled':''}>${dOpts}</select></td>
+      <td><input type="date" class="ce ${hOs?'ov':''}" style="width:108px" value="${t.so||iso(t.start)}" onchange="sf('${t.id}','so',this.value||null)" ${sDis?'disabled':''}></td>
+      <td><input type="date" class="ce ${hOe?'ov':''}" style="width:108px" value="${eoDisplay}" onchange="sf('${t.id}','eo',this.value||null)" ${eDis?'disabled':''}></td>
+      ${dd}
+      <td>${wiCell}</td>
+      <td><button class="del-btn" onclick="delTask('${t.id}')" ${vDis?'disabled':''}>✕</button></td>
+      <td style="padding:0;height:28px;border-left:1.5px solid #d3d1c7;">
+        <div style="position:relative;width:${tcp}px;height:28px;">
+          <div style="position:absolute;top:0;left:${tpx}px;width:2px;height:28px;background:#e24b4a;opacity:0.35;pointer-events:none;"></div>
+          ${(()=>{
+            const _endForBar = t.estado==='completado'
+              ? (t.eoReal||t.eo||t.eoPlan||iso(t.end))
+              : (t.eo||t.eoPlan||iso(t.end));
+            const _startForBar = t.so || (t.start?iso(t.start):null);
+            if(!_startForBar||!_endForBar)return '';
+            const _bc=t.estado==='completado'?'#16A34A':gc((t.adev&&t.adev.pi)||0).bar;
+            const _op=(t.estado==='nuevo'||t.estado==='aprobado')?'0.78':'1';
+            const _delayDays=Math.max(0,parseInt(t.delayDays)||0);
+            const _testDays=Math.max(0,parseInt(t.testDays)||0);
+            const _baseHours=taskBaseHours(t);
+            const _delayHours=taskDelayHours(t,proj);
+            const _testDaysHours=taskTestDaysHours(t,proj);
+            const _totalHours=Math.max(1,_baseHours+_delayHours+_testDaysHours);
+            const _delayPct=_totalHours?(_delayHours/_totalHours)*100:0;
+            const _testDaysPct=_totalHours?(_testDaysHours/_totalHours)*100:0;
+            const _devPct=_totalHours?((t.hDev||0)/_totalHours)*100:0;
+            const _testPct=_totalHours?((t.hTest||0)/_totalHours)*100:0;
+            const _garPct=_totalHours?((t.garantia||0)/_totalHours)*100:0;
+            const _delayColor=lightenColor(_bc,0.38);
+            const _testDaysColor=lightenColor(_bc,0.20);
+            const _devColor=_bc;
+            const _testColor=darkenColor(_bc,0.12);
+            const _garColor=darkenColor(_bc,0.24);
+            const _trackHtml='<div class="gantt-bar-track" title="'+t.id+' · Dev: '+(t.hDev||0)+'h · Test: '+(t.hTest||0)+'h · Gar: '+(t.garantia||0)+'h'+(_delayDays>0?' · Retraso: '+_delayDays+' día(s)':'')+(_testDays>0?' · Pruebas: '+_testDays+' día(s)':'')+'">'
+              +(_delayPct>0?'<div class="gantt-seg gantt-delay-seg" style="left:0;width:'+_delayPct+'%;background:'+_delayColor+'"></div>':'')
+              +(_testDaysPct>0?'<div class="gantt-seg gantt-delay-seg" style="left:'+_delayPct+'%;width:'+_testDaysPct+'%;background:'+_testDaysColor+'"></div>':'')
+              +'<div class="gantt-seg gantt-dev-seg" style="left:'+(_delayPct+_testDaysPct)+'%;width:'+_devPct+'%;background:'+_devColor+'"></div>'
+              +'<div class="gantt-seg gantt-test-seg" style="left:'+(_delayPct+_testDaysPct+_devPct)+'%;width:'+_testPct+'%;background:'+_testColor+'"></div>'
+              +'<div class="gantt-seg gantt-gar-seg" style="left:'+(_delayPct+_testDaysPct+_devPct+_testPct)+'%;width:'+_garPct+'%;background:'+_garColor+'"></div>'
+              +'</div>';
+            return '<div class="gantt-range gantt-bar" data-start="'+_startForBar+'" data-end="'+_endForBar+'" style="left:0px;width:0px;opacity:'+_op+';--dev-color:'+_bc+';">'
+              +_trackHtml
+              +'<span class="gantt-bar-label">'+(t.estado==='completado'?'✔ ':'')+t.id+'</span>'
+              +'</div>';
+          })()}
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  const nP=proj.tasks.length>0?Math.max(...proj.tasks.map(t=>t.pri))+1:1;
+  if(filteredSch.length===0){
+    h+=`<tr><td colspan="17" style="text-align:center;padding:24px;color:#888780;font-size:13px;">No hay desarrollos que coincidan con los filtros.</td></tr>`;
+  }
+  h+=`<tr class="add-row">
+    <td class="sk" style="left:0"></td>
+    <td class="sk" style="left:108px"><input id="ni" class="ce" placeholder="AP-AXO-XXX" style="width:80px"></td>
+    <td><input id="nn" class="ce" placeholder="Nombre del desarrollo" style="min-width:128px"></td>
+    <td style="text-align:center"><input id="np2" class="ce-pri" type="number" min="1" placeholder="${nP}" style="width:52px;text-align:center"></td>
+    <td style="text-align:center"><input id="nh-dev" class="ce" type="number" placeholder="0" style="width:48px;text-align:center"></td>
+    <td style="text-align:center"><input id="nh-test" class="ce" type="number" placeholder="0" style="width:48px;text-align:center"></td>
+    <td style="text-align:center"><input id="nh-gar" class="ce" type="number" placeholder="0" style="width:48px;text-align:center"></td>
+    <td style="text-align:center;background:#eef2fb;color:#0c447c;font-weight:600">—</td>
+    <td></td>
+    <td></td>
+    <td></td>
+    <td><select id="nd" class="cs">${aD.length===0?'<option value="">— sin devs activos —</option>':'<option value="" selected>Auto</option>'+aD.map(d=>`<option value="${d.id}">${d.name}</option>`).join('')}</select></td>
+    <td><button class="add-btn" onclick="addTask()">+ Agregar</button></td>
+    <td></td>
+    <td></td><td></td>
+  </tr>
+  <tr class="total-row">
+    <td colspan="3">Total</td><td></td>
+    <td style="text-align:center">${tH}</td>
+    <td></td><td></td><td></td><td></td><td></td><td colspan="5"></td><td></td><td></td>
+    <td style="font-size:11px;color:#888780;padding-left:4px">${wdB(minD,maxD)} días hábiles · ~${tW} sem. · fin: ${fmt(maxD)}</td>
+  </tr></tbody></table></div>`;
+
+  document.getElementById('root').innerHTML=h;
+  requestAnimationFrame(()=>applyRealBarPositions());
+  if(openDrop){const el=document.getElementById(openDrop);if(el)el.classList.add('open');}
+
+  }catch(err){
+    console.error('render() error:',err);
+    const root=document.getElementById('root');
+    if(root)root.innerHTML='<div style="padding:24px;color:#791f1f;background:#fcebeb;border-radius:8px;margin:16px;font-size:13px;"><strong>Error al cargar el proyecto.</strong><br>'+err.message+'<br><br><button onclick="forceReset()" style="margin-top:8px;padding:6px 14px;border-radius:6px;border:none;background:#1a1a18;color:#fff;cursor:pointer;font-size:12px;">Reiniciar datos</button></div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════════════
+function ug(k,v){const proj=activeProject();proj[k]=v;saveState();render();}
+
+function setE(taskId,v){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+  const prev=t.estado;
+  const scheduledBefore=sched(proj).sch.find(x=>x.id===taskId);
+
+  if(v==='completado'){
+    const manualCurrentEnd=t.eo||null;
+    const plannedEnd=t.eoPlan||manualCurrentEnd||scheduledBefore?.eo||scheduledBefore?.eoPlan||(scheduledBefore?.end?iso(scheduledBefore.end):null)||null;
+
+    if(plannedEnd)t.eoPlan=plannedEnd;
+
+    t.eoReal = manualCurrentEnd || t.eoReal || t.eoPlan || iso(TODAY);
+    t.eo = t.eoReal;
+    t.estado='completado';
+  }else{
+    t.estado=v;
+
+    // Al salir de completado, volver a modo planificado
+    if(prev==='completado'){
+      t.eoReal=null;
+
+      const startIso =
+        t.so ||
+        scheduledBefore?.so ||
+        (scheduledBefore?.start ? iso(scheduledBefore.start) : null) ||
+        null;
+
+      if(startIso){
+        t.so = startIso;
+        const recalculatedEnd = calcEo(
+          startIso,
+          taskBaseHours(t),
+          t.pdi,
+          proj.hpd||8,
+          t.delayDays||0,
+          t.testDays||0
+        );
+        t.eo = recalculatedEnd;
+        t.eoPlan = recalculatedEnd;
+      }else{
+        t.eo = null;
+        t.eoPlan = null;
+      }
+    }
+
+    // Nuevo / Aprobado:
+    // NO borrar fechas, solo sacarlo de la carga activa.
+    if(v==='nuevo'||v==='aprobado'){
+      t._autoPdi = !t.pdi;
+      t._manualSo = !!t.so;
+
+      if(t.so){
+        const recalculatedEnd = calcEo(
+          t.so,
+          taskBaseHours(t),
+          t.pdi,
+          proj.hpd||8,
+          t.delayDays||0,
+          t.testDays||0
+        );
+        t.eo = recalculatedEnd;
+        t.eoPlan = recalculatedEnd;
+      }else{
+        const again = sched(proj).sch.find(x=>x.id===taskId);
+        if(again){
+          t.so = iso(again.start);
+          t.eo = iso(again.end);
+          t.eoPlan = iso(again.end);
+        }
+      }
+    }
+
+    // Pausado / Probando / Garantía:
+    // mantener fechas visibles y reajustarlas si existen
+    if(v==='pausa_cliente'||v==='pruebas_cliente'||v==='en_garantia'||v==='en_desarrollo'){
+      if(t.so){
+        const recalculatedEnd = calcEo(
+          t.so,
+          taskBaseHours(t),
+          t.pdi,
+          proj.hpd||8,
+          t.delayDays||0,
+          t.testDays||0
+        );
+        t.eo = recalculatedEnd;
+        t.eoPlan = recalculatedEnd;
+      }else{
+        const again = sched(proj).sch.find(x=>x.id===taskId);
+        if(again){
+          t.so = iso(again.start);
+          t.eo = iso(again.end);
+          t.eoPlan = iso(again.end);
+        }
+      }
+    }
+  }
+
+  saveState();
+  if(proj.devops.autoSync&&t.wiId&&v!==prev)syncWIState(taskId,v);
+
+  render();
+  requestAnimationFrame(()=>applyRealBarPositions());
+}
+
+function calcEo(so,total,dev,hpd,delayDays=0,testDays=0){
+  // Duration = ceil(hours / hpd) + extra days — avail% does NOT affect days
+  const days=Math.max(1,Math.ceil(total/hpd)+(Math.max(0,parseInt(delayDays)||0))+(Math.max(0,parseInt(testDays)||0)));
+  return iso(addWD(parseDate(so),days));
+}
+
+function sfH(taskId,field,value){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+  t[field]=Math.max(0,parseInt(value)||0);
+  t.total=Math.max(1,(t.hDev||0)+(t.hTest||0)+(t.garantia||0));
+  if(t.estado==='nuevo'||t.estado==='aprobado'){t.eo=null;}
+  saveState();render();
+}
+function sf(taskId,field,value){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+
+  t[field]=value;
+
+  if(field==='so'&&canSo(t)){
+    t._manualSo=!!value;
+    if(value){
+      if(t.pdi){
+        // Keep the currently assigned dev when the user edits start date manually.
+        t._autoPdi=false;
+      }
+      t.so=iso(nxWD(parseDate(value)));
+
+      if(t.estado==='pausa_cliente' || t.estado==='pruebas_cliente' || t.estado==='en_desarrollo' || t.estado==='en_garantia'){
+        const recalculatedEnd = calcEo(
+          t.so,
+          taskBaseHours(t),
+          t.pdi,
+          proj.hpd||8,
+          t.delayDays||0,
+          t.testDays||0
+        );
+        t.eo = recalculatedEnd;
+        t.eoPlan = recalculatedEnd;
+      } else {
+        t.eo=null;
+        t.eoPlan=null;
+      }
+
+      if(t.estado==='completado')t.eoReal=t.so;
+    }
+    // Check if dev is busy on this date only against tasks still in progress.
+    // Finished tasks are historical and must not block manual dates.
+    if(value&&t.pdi){
+      const dev=allDevs(proj).find(d=>d.id===t.pdi);
+      const conflict=proj.tasks.find(x=>
+        x.id!==taskId&&x.pdi===t.pdi&&
+        (x.estado==='en_desarrollo'||x.estado==='en_garantia')&&
+        x.so&&x.eo&&
+        norm(parseDate(x.so))<=norm(parseDate(value))&&
+        norm(parseDate(value))<=norm(parseDate(x.eo))
+      );
+      if(conflict&&dev){
+        showToast('⚠ '+dev.name+' ocupado hasta '+conflict.eo+' en '+conflict.id+' — fecha ajustada automáticamente','error');
+      }
+    }
+    cascadeDevTasks(proj,t.pdi,taskId);
+  }
+
+  if(field==='eo'&&(t.estado==='nuevo'||t.estado==='aprobado')){
+    if(value&&t.so&&parseDate(value)<parseDate(t.so)){
+      showToast('⚠ La fecha fin no puede ser menor que la fecha inicio','error');
+      t.eo=t.so;
+    }
+  }
+
+  if(field==='eo'&&t.estado==='completado'){
+    t.eoReal=value||null;
+    if(value&&t.so&&parseDate(value)<parseDate(t.so)){
+      showToast('⚠ La fecha fin real no puede ser menor que la fecha inicio','error');
+      t.eoReal=t.so;
+    }
+  }
+
+  if(field==='total'){
+    t.total=parseInt(value)||1;
+    // Clear eo so sched() recalculates with new hours
+    if(t.estado!=='completado'){ t.eo=null; cascadeDevTasks(proj,t.pdi,taskId); }
+  }
+
+  if(field==='delayDays'){
+    t.delayDays=Math.max(0,parseInt(value)||0);
+
+    // Changing delay days must keep the current start date fixed.
+    // Only recalculate the finish of this task.
+    if(t.estado!=='completado' && t.so){
+      const recalculatedEnd = calcEo(
+        t.so,
+        taskBaseHours(t),
+        t.pdi,
+        proj.hpd||8,
+        t.delayDays||0,
+        t.testDays||0
+      );
+      t.eo = recalculatedEnd;
+      t.eoPlan = recalculatedEnd;
+    } else if(t.estado!=='completado'){
+      t.eo=null;
+      t.eoPlan=null;
+    }
+  }
+
+  if(field==='testDays'){
+    t.testDays=Math.max(0,parseInt(value)||0);
+
+    // Same rule: keep start fixed and only move the finish.
+    if(t.estado!=='completado' && t.so){
+      const recalculatedEnd = calcEo(
+        t.so,
+        taskBaseHours(t),
+        t.pdi,
+        proj.hpd||8,
+        t.delayDays||0,
+        t.testDays||0
+      );
+      t.eo = recalculatedEnd;
+      t.eoPlan = recalculatedEnd;
+    } else if(t.estado!=='completado'){
+      t.eo=null;
+      t.eoPlan=null;
+    }
+  }
+
+  saveState();render();
+}
+function cascadeDevTasks(proj,devId,changedTaskId){
+  // Reset so/eo of non-manual tasks of same dev that still follow the plan flow
+  // so sched() repositions them after the changed task
+  if(!devId)return;
+  proj.tasks.forEach(t=>{
+    if(t.id!==changedTaskId&&t.pdi===devId&&t.estado!=='completado'&&!t._manualSo){
+      t.so=null;t.eo=null;
+    }
+  });
+}
+
+function sfId(oldId,newId){
+  const proj=activeProject();
+  newId=newId.trim();
+  if(!newId||newId===oldId)return;
+  if(proj.tasks.find(t=>t.id===newId)){alert('ID ya existe.');return;}
+  const t=proj.tasks.find(x=>x.id===oldId);if(!t)return;
+  proj.tasks.forEach(x=>{x.deps=x.deps.map(d=>d===oldId?newId:d);});
+  t.id=newId;
+  saveState();render();
+  if(t.wiId&&devopsConfigured(proj)){
+    const url=devopsUrl(proj,`wit/workitems/${t.wiId}?api-version=7.0`);
+    fetch(url,{method:'PATCH',headers:devopsHeaders(proj),body:JSON.stringify(buildDevOpsTaskFields(t,proj,{includeState:true,includeAssignedTo:true}))})
+      .then(r=>{if(r.ok)showToast(`✓ WI #${t.wiId} título actualizado`,'success');})
+      .catch(()=>{});
+  }
+}
+
+function priKeydown(e,taskId){if(e.key==='Enter')e.target.blur();}
+function priBlu(e,taskId){
+  const val=parseInt(e.target.value);
+  const proj=activeProject();
+  if(isNaN(val)||val<1){e.target.value=proj.tasks.find(t=>t.id===taskId)?.pri||1;return;}
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+  t.pri=val;saveState();render();
+}
+
+function delTask(taskId){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+  showModal('Eliminar tarea',`¿Eliminar <strong>${t.id}</strong>?`,()=>{
+    proj.tasks=proj.tasks.filter(x=>x.id!==taskId);
+    proj.tasks.forEach(x=>{x.deps=x.deps.filter(d=>d!==taskId);});
+    saveState();renderSidebar();render();
+  });
+}
+
+function addTask(){
+  const proj=activeProject();
+  const id=document.getElementById('ni').value.trim();
+  const name=document.getElementById('nn').value.trim();
+  const nP=proj.tasks.length>0?Math.max(...proj.tasks.map(t=>t.pri))+1:1;
+  const pri=parseInt(document.getElementById('np2')?.value)||nP;
+  const hDev=Math.max(0,parseInt(document.getElementById('nh-dev')?.value)||0);
+  const hTest=Math.max(0,parseInt(document.getElementById('nh-test')?.value)||0);
+  const garantia=Math.max(0,parseInt(document.getElementById('nh-gar')?.value)||0);
+  const total=Math.max(1,hDev+hTest+garantia);
+  const ndEl=document.getElementById('nd');
+  const pdi = ndEl && ndEl.value ? ndEl.value : null;
+  const autoAssign = !pdi;
+  if(!id||!name){alert('ID y nombre son obligatorios.');return;}
+  if(proj.tasks.find(t=>t.id===id)){alert('ID ya existe.');return;}
+  // Clear pending overrides so scheduler recalculates
+  proj.tasks.forEach(t=>{if(t.estado==='nuevo'||t.estado==='aprobado'){t.so=null;t.eo=null;}});
+  proj.tasks.push({
+  id,
+  name,
+  total,
+  hDev,
+  hTest,
+  garantia,
+  pri,
+  deps:[],
+  pdi: autoAssign ? null : pdi,
+  _autoPdi: autoAssign,
+  estado:'nuevo',
+  so:null,
+  eo:null,
+  delayDays:0,
+  testDays:0,
+  wiId:null
+});
+  saveState();renderSidebar();render();
+  // Show confirmation with calculated start date
+  const _schedResult=sched(proj);
+  const _newTask=_schedResult.sch.find(t=>t.id===id);
+  if(_newTask){
+    const devName=(allDevs(proj).find(d=>d.id===pdi)||{}).name||'';
+    showToast('✓ '+id+' agregado — '+devName+' desde '+fmt(_newTask.start),'success');
+  }
+}
+
+function rnDev(id,v){const proj=activeProject();const d=proj.devs.find(x=>x.id===id);if(d){d.name=v;saveState();render();}}
+function rnDevEmail(id,v){const proj=activeProject();const d=proj.devs.find(x=>x.id===id);if(d){d.devopsEmail=v.trim();saveState();}}
+function tgAct(id,v){const proj=activeProject();const d=proj.devs.find(x=>x.id===id);if(d){d.active=v;saveState();render();}}
+function updDevAvail(id,v){
+  const proj=activeProject();
+  const d=proj.devs.find(x=>x.id===id);
+  if(!d)return;
+  d.avail=parseInt(v)||0;
+  saveState();render();
+}
+function delDev(id){
+  const proj=activeProject();
+  if(proj.tasks.some(t=>t.estado==='completado'&&t.pdi===id)){alert('Tiene tareas completadas.');return;}
+  showModal('Eliminar desarrollador','¿Eliminar este desarrollador?',()=>{
+    proj.tasks.forEach(t=>{if(t.pdi===id)t.pdi=null;});
+    proj.devs=proj.devs.filter(d=>d.id!==id);saveState();render();
+  });
+}
+function addDev(){
+  const proj=activeProject();
+  const used=proj.devs.map(d=>d.pi),next=[0,1,2,3,4,5,6].find(i=>!used.includes(i))??proj.devs.length%7;
+  proj.devs.push({id:'d'+Date.now(),name:`DEV${proj.devs.length+1}`,active:true,pi:next,devopsEmail:'',avail:100,global:false});
+  saveState();render();
+}
+
+
+function buildDevOpsTaskFields(t,proj,opts={}){
+  const title=`${t.id} - ${t.name}`;
+  const fields=[
+    {op:'add',path:'/fields/System.Title',value:title},
+    {op:'add',path:'/fields/System.Description',value:`<p>${t.id} — ${t.name}</p>`},
+    {op:'add',path:'/fields/Microsoft.VSTS.Scheduling.StartDate',value:t.so?t.so+'T15:00:00.000Z':null},
+    {op:'add',path:'/fields/Microsoft.VSTS.Scheduling.FinishDate',value:t.eo?t.eo+'T15:00:00.000Z':null},
+    {op:'add',path:'/fields/Microsoft.VSTS.Scheduling.StoryPoints',value:parseFloat(taskCountableHours(t))||0},
+    {op:'add',path:'/fields/Custom.Totalestimate',value:parseFloat(taskCountableHours(t))||0},
+    {op:'add',path:'/fields/Custom.Development',value:parseFloat(t.hDev)||0},
+    {op:'add',path:'/fields/Custom.Testing',value:parseFloat(t.hTest)||0},
+    {op:'add',path:'/fields/Custom.Warranty',value:parseFloat(t.garantia)||0}
+  ];
+  if(opts.includeState)fields.push({op:'add',path:'/fields/System.State',value:getEstadoWI(t.estado,proj)});
+  if(opts.includeAssignedTo){
+    const assignedDev=allDevs(proj).find(d=>d.id===t.pdi);
+    const assignedEmail=assignedDev?.devopsEmail?.trim()||'';
+    fields.push({op:'add',path:'/fields/System.AssignedTo',value:assignedEmail||''});
+  }
+  if(proj.devops.areaPath)fields.push({op:'add',path:'/fields/System.AreaPath',value:proj.devops.areaPath});
+  if(proj.devops.iterationPath)fields.push({op:'add',path:'/fields/System.IterationPath',value:proj.devops.iterationPath});
+  return fields.filter(f=>f.value!==null&&f.value!==undefined);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// DEVOPS ACTIONS
+// ═══════════════════════════════════════════════════════════════
+function saveDevopsConfig(){
+  const proj=activeProject();
+  proj.devops.org=document.getElementById('do-org')?.value.trim()||'';
+  proj.devops.project=document.getElementById('do-proj')?.value.trim()||'';
+  proj.devops.pat=document.getElementById('do-pat')?.value.trim()||'';
+  proj.devops.wiType=document.getElementById('do-witype')?.value||'Task';
+  proj.devops.areaPath=document.getElementById('do-area')?.value.trim()||'';
+  proj.devops.iterationPath=document.getElementById('do-iter')?.value.trim()||'';
+  proj.devops.stNuevo=document.getElementById('do-st-new')?.value.trim()||'New';
+  proj.devops.stAprobado=document.getElementById('do-st-approved')?.value.trim()||'Approved';
+  proj.devops.stEnDesarrollo=document.getElementById('do-st-dev')?.value.trim()||'Doing';
+  proj.devops.stPausaCliente=document.getElementById('do-st-pause')?.value.trim()||'On Hold';
+  proj.devops.stPruebasCliente=document.getElementById('do-st-clienttest')?.value.trim()||'Client Testing';
+  proj.devops.stCompletado=document.getElementById('do-st-done')?.value.trim()||proj.devops.stCompletado||'Done';
+  proj.devops.stEnGarantia=document.getElementById('do-st-warranty')?.value.trim()||'Warranty';
+  saveState();render();
+  if(devopsConfigured(proj))showToast('✓ Configuración DevOps guardada','success');
+}
+
+function toggleAutoSync(){
+  const proj=activeProject();
+  proj.devops.autoSync=!proj.devops.autoSync;
+  saveState();render();
+}
+
+async function testConnection(){
+  const proj=activeProject();
+  saveDevopsConfig();
+  if(!devopsConfigured(proj)){showToast('Completa org, proyecto y PAT','error');return;}
+  const btn=document.getElementById('btn-test-conn');
+  if(btn){btn.disabled=true;btn.textContent='Probando...';}
+  try{
+    const url=devopsUrl(proj,'projects?api-version=7.0&$top=1');
+    const resp=await fetch(url,{method:'GET',headers:{Authorization:'Basic '+btoa(':'+proj.devops.pat.trim())}});
+    if(resp.status===401)throw new Error('PAT inválido (401)');
+    if(resp.status===404)throw new Error('Organización no encontrada (404)');
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const projUrl=devopsUrl(proj,'projects/'+encodeURIComponent(proj.devops.project.trim())+'?api-version=7.0');
+    const pResp=await fetch(projUrl,{method:'GET',headers:{Authorization:'Basic '+btoa(':'+proj.devops.pat.trim())}});
+    if(!pResp.ok)throw new Error(`Proyecto "${proj.devops.project}" no encontrado`);
+    const pData=await pResp.json();
+    showToast(`✓ Conexión exitosa — "${pData.name}"`,'success');
+  }catch(err){showToast('✕ '+err.message,'error');}
+  finally{const b=document.getElementById('btn-test-conn');if(b){b.disabled=false;b.textContent='Probar conexión';}}
+}
+
+async function createWI(taskId){
+  const proj=activeProject();
+  if(!devopsConfigured(proj)){showModal('DevOps no configurado','Completa org, proyecto y PAT.',()=>{});return;}
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+  if(t.wiId){showModal('WI ya existe',`Ya tiene WI #${t.wiId}.`,()=>{});return;}
+  t.wiCreating=true;render();
+  const fields=buildDevOpsTaskFields(t,proj);
+  try{
+    const wiType=encodeURIComponent(proj.devops.wiType||'Issue');
+    const url=devopsUrl(proj,`wit/workitems/$${wiType}?api-version=7.0`);
+    const resp=await fetch(url,{method:'POST',headers:devopsHeaders(proj),body:JSON.stringify(fields)});
+    if(!resp.ok){const err=await resp.text();throw new Error(`HTTP ${resp.status}: ${err}`);}
+    const data=await resp.json();
+    t.wiId=data.id;t.wiCreating=false;saveState();render();
+    showToast(`✓ WI #${data.id} creado`,'success');
+    const post=buildDevOpsTaskFields(t,proj,{includeState:true,includeAssignedTo:true});
+    if(post.length){
+      const pUrl=devopsUrl(proj,`wit/workitems/${data.id}?api-version=7.0`);
+      fetch(pUrl,{method:'PATCH',headers:devopsHeaders(proj),body:JSON.stringify(post)}).catch(()=>{});
+    }
+  }catch(err){
+    t.wiCreating=false;t.wiError=true;
+    setTimeout(()=>{const tx=activeProject().tasks.find(x=>x.id===taskId);if(tx)tx.wiError=false;render();},4000);
+    render();showToast(`Error al crear WI: ${err.message}`,'error');
+  }
+}
+
+async function syncWIState(taskId,newEstado){
+  const proj=activeProject();
+  if(!devopsConfigured(proj))return;
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t||!t.wiId)return;
+  try{
+    t.estado=newEstado;
+    const url=devopsUrl(proj,`wit/workitems/${t.wiId}?api-version=7.0`);
+    const body=JSON.stringify(buildDevOpsTaskFields(t,proj,{includeState:true,includeAssignedTo:true}));
+    const resp=await fetch(url,{method:'PATCH',headers:devopsHeaders(proj),body});
+    if(resp.ok)showToast(`✓ WI #${t.wiId} → ${getEstadoWI(newEstado,proj)}`,'success');
+    else throw new Error('HTTP '+resp.status);
+  }catch(err){showToast(`Error sync WI #${t.wiId}: ${err.message}`,'error');}
+}
+
+async function manualSyncWI(taskId){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t||!t.wiId)return;
+  const fields=buildDevOpsTaskFields(t,proj,{includeState:true,includeAssignedTo:true});
+  try{
+    const url=devopsUrl(proj,`wit/workitems/${t.wiId}?api-version=7.0`);
+    const resp=await fetch(url,{method:'PATCH',headers:devopsHeaders(proj),body:JSON.stringify(fields)});
+    if(resp.ok)showToast(`✓ WI #${t.wiId} sincronizado`,'success');
+    else{const e=await resp.text();showToast(`✗ Error: ${e.slice(0,80)}`,'error');}
+  }catch(err){showToast(`✗ Error: ${err.message}`,'error');}
+}
+
+function unlinkWI(taskId){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);if(!t||!t.wiId)return;
+  showModal('Desvincular WI',`¿Desvincular <strong>${taskId}</strong> del WI #${t.wiId}?`,()=>{
+    t.wiId=null;saveState();render();showToast('WI desvinculado','success');
+  });
+}
+
+async function linkExistingWI(taskId){
+  const proj=activeProject();
+  if(!devopsConfigured(proj)){showToast('Configura DevOps primero','error');return;}
+  const wiNum=prompt('Número del Work Item a vincular:');
+  if(!wiNum||isNaN(parseInt(wiNum)))return;
+  const id=parseInt(wiNum);
+  try{
+    const url=devopsUrl(proj,`wit/workitems/${id}?api-version=7.0`);
+    const resp=await fetch(url,{method:'GET',headers:{Authorization:'Basic '+btoa(':'+proj.devops.pat.trim())}});
+    if(!resp.ok)throw new Error('WI #'+id+' no encontrado');
+    const data=await resp.json();
+    showModal('Vincular Work Item',
+      `¿Vincular <strong>${taskId}</strong> con WI <strong>#${id}</strong> — ${data.fields?.['System.Title']||''}?`,
+      ()=>{const t=proj.tasks.find(x=>x.id===taskId);if(t){t.wiId=id;saveState();render();showToast('WI vinculado','success');}}
+    );
+  }catch(err){showToast('Error: '+err.message,'error');}
+}
+async function fetchWITypes(){
+  const proj=activeProject();
+  saveDevopsConfig();
+  const sel=document.getElementById('do-witype');
+	if(sel&&sel.options.length>1)return; // ya cargados, no recargar
+	if(!devopsConfigured(proj)){showToast('Configura primero','error');return;}
+  try{
+    showToast('Consultando tipos...','success');
+    const url=devopsUrl(proj,'wit/workitemtypes?api-version=7.0');
+    const resp=await fetch(url,{method:'GET',headers:{Authorization:'Basic '+btoa(':'+proj.devops.pat.trim())}});
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const data=await resp.json();
+    const types=(data.value||[]).map(t=>t.name).filter(n=>!['Test Plan','Test Suite','Test Case','Shared Steps'].includes(n));
+    if(!sel)return;
+    const current=proj.devops.wiType||'Task';
+    sel.innerHTML=types.map(t=>`<option value="${t}" ${t===current?'selected':''}>${t}</option>`).join('');
+    showToast('✓ '+types.length+' tipos — selecciona uno','success');
+  }catch(err){showToast('Error: '+err.message,'error');}
+}
+
+async function fetchWIStates(){
+  const proj=activeProject();
+  if(!devopsConfigured(proj)){showToast('Configura primero','error');return;}
+  const wiType=encodeURIComponent(proj.devops.wiType||'Issue');
+  const url=devopsUrl(proj,`wit/workitemtypes/${wiType}/states?api-version=7.0`);
+  try{
+    showToast('Consultando estados...','success');
+    const resp=await fetch(url,{method:'GET',headers:{Authorization:'Basic '+btoa(':'+proj.devops.pat.trim())}});
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const data=await resp.json();
+    const states=(data.value||[]).map(s=>s.name);
+    if(!states.length){showToast('No se encontraron estados','error');return;}
+    const opts=states.map(n=>`<option value="${n}">${n}</option>`).join('');
+    document.getElementById('modal-area').innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="min-width:400px">
+        <h2>Estados disponibles</h2>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Nuevo →</label><select id="pick-new" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div><div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Aprobado →</label><select id="pick-approved" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
+          <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">En desarrollo →</label><select id="pick-dev" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
+          <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Pausado →</label><select id="pick-pause" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
+          <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Probando →</label><select id="pick-clienttest" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
+          <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Completado →</label><select id="pick-done" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
+          <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">En garantía →</label><select id="pick-warranty" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
+        </div>
+        <div style="font-size:11px;color:#888780;margin-bottom:14px;">Encontrados: ${states.join(' · ')}</div>
+        <div class="modal-actions"><button class="hbtn" onclick="document.getElementById('modal-area').innerHTML=''">Cancelar</button><button class="hbtn primary" onclick="applyPickedStates()">Aplicar</button></div>
+      </div></div>`;
+    function trySelect(id,kws){const sel=document.getElementById(id);if(!sel)return;const m=states.find(n=>kws.some(k=>n.toLowerCase().includes(k)));if(m)sel.value=m;}
+    trySelect('pick-new',['new','pending','to do']);
+    trySelect('pick-approved',['approved','aprobado','to do','pending']);
+    trySelect('pick-dev',['develop','doing','progress','activo','active']);
+    trySelect('pick-pause',['hold','pause','paused','waiting','blocked','on hold']);
+    trySelect('pick-clienttest',['test','testing','qa','uat','client','delivered']);
+    trySelect('pick-done',['done','complet','resolv','completado','closed']);
+    trySelect('pick-warranty',['warranty','garant']);
+  }catch(err){showToast('Error: '+err.message,'error');}
+}
+
+function applyPickedStates(){
+  const proj=activeProject();
+  proj.devops.stNuevo=document.getElementById('pick-new')?.value||proj.devops.stNuevo;
+  proj.devops.stAprobado=document.getElementById('pick-approved')?.value||proj.devops.stAprobado;
+  proj.devops.stEnDesarrollo=document.getElementById('pick-dev')?.value||proj.devops.stEnDesarrollo;
+  proj.devops.stPausaCliente=document.getElementById('pick-pause')?.value||proj.devops.stPausaCliente;
+  proj.devops.stPruebasCliente=document.getElementById('pick-clienttest')?.value||proj.devops.stPruebasCliente;
+  proj.devops.stCompletado=document.getElementById('pick-done')?.value||proj.devops.stCompletado||proj.devops.stTerminado;
+  proj.devops.stEnGarantia=document.getElementById('pick-warranty')?.value||proj.devops.stEnGarantia;
+  document.getElementById('modal-area').innerHTML='';
+  saveState();render();showToast('✓ Estados aplicados','success');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PANEL TOGGLE
+// ═══════════════════════════════════════════════════════════════
+function togglePanel(id){
+  const body=document.getElementById(id);if(!body)return;
+  const isCollapsed=body.classList.contains('collapsed');
+  body.classList.toggle('collapsed',!isCollapsed);
+  const btn=document.querySelector(`[data-panel="${id}"]`);
+  if(btn)btn.textContent=isCollapsed?'▲ Ocultar':'▼ Mostrar';
+  try{localStorage.setItem('panel_'+id,isCollapsed?'open':'closed');}catch(e){}
+}
+function initPanels(){
+  ['devops-body','devmgr-body'].forEach(id=>{
+    try{
+      const body=document.getElementById(id);
+      const btn=document.querySelector(`[data-panel="${id}"]`);
+      const saved=localStorage.getItem('panel_'+id);
+      const open=saved==='open'?true:false;
+      if(body)body.classList.toggle('collapsed',!open);
+      if(btn)btn.textContent=open?'▲ Ocultar':'▼ Mostrar';
+      if(!saved)localStorage.setItem('panel_'+id,'closed');
+    }catch(e){}
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXPORT / IMPORT
+// ═══════════════════════════════════════════════════════════════
+function exportAllJSON(){
+  const b=new Blob([JSON.stringify(G,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  const d=new Date();a.download=`AP-AXO-All-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;a.click();
+}
+function exportCurrentJSON(){
+  const proj=activeProject();
+  const b=new Blob([JSON.stringify(proj,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  const d=new Date();a.download=`${proj.name}-Plan-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;a.click();
+}
+function importJSON(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const imp=JSON.parse(e.target.result);
+      if(imp.projects){
+        // Full export
+        showModal('Importar todo',`¿Reemplazar todos los proyectos con <strong>${f.name}</strong>?`,()=>{
+          G=imp;if(!G.globalDevs)G.globalDevs=[];
+          if(!G.activeProjectId&&G.projects.length)G.activeProjectId=G.projects[0].id;
+          saveState();renderSidebar();render();
+        });
+      }else if(imp.tasks&&imp.devs){
+        // Single project export
+        showModal('Importar proyecto',`¿Agregar proyecto <strong>${imp.name||f.name}</strong>?`,()=>{
+          if(!imp.id)imp.id='proj_'+Date.now();
+          if(!imp.color)imp.color=PROJ_COLORS[0];
+          if(!imp.devops)imp.devops={...DEF_DEVOPS};
+          G.projects.push(imp);G.activeProjectId=imp.id;
+          saveState();renderSidebar();render();
+        });
+      }else throw 0;
+    }catch(e){alert('Archivo no válido.');}
+  };
+  r.readAsText(f);ev.target.value='';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════════════════════
+function showModal(title,body,onOk){
+  document.getElementById('modal-area').innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)this.remove()"><div class="modal"><h2>${title}</h2><div class="modal-body">${body}</div><div class="modal-actions"><button class="hbtn" onclick="document.getElementById('modal-area').innerHTML=''">Cancelar</button><button class="hbtn primary" id="mok">Confirmar</button></div></div></div>`;
+  document.getElementById('mok').onclick=()=>{onOk();document.getElementById('modal-area').innerHTML='';};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PDF
+// ═══════════════════════════════════════════════════════════════
+async function exportPDF(){
+  if(viewingGlobalDevs)return;
+  if(typeof html2canvas==='undefined'||typeof jspdf==='undefined'){alert('Librerías PDF cargando.');return;}
+  const btn=document.getElementById('btn-pdf');
+  const overlay=document.getElementById('pdf-overlay');
+  const label=document.getElementById('pdf-label');
+  btn.disabled=true;overlay.classList.add('active');
+  try{
+    const proj=activeProject();
+    const{sch,df}=sched(proj);
+    const pdfTasks=displaySortedTasks(sch);
+    const allD=pdfTasks.flatMap(t=>[t.start,t.end]);
+    if(!allD.length){overlay.classList.remove('active');btn.disabled=false;alert('No hay tareas para exportar.');return;}
+    const pad_placeholder=null;
+  const minD=norm(new Date(Math.min(...allD.map(d=>d.getTime())))),maxD=norm(new Date(Math.max(...allD.map(d=>d.getTime()))));
+    const backlogH=proj.tasks.filter(t=>t.estado==='nuevo').reduce((s,t)=>s+taskCountableHours(t),0);
+    const committedH=proj.tasks.filter(t=>t.estado!=='nuevo').reduce((s,t)=>s+taskCountableHours(t),0);
+    const completedCommittedH=proj.tasks.filter(t=>t.estado==='completado').reduce((s,t)=>s+taskCountableHours(t),0);
+    const remainingCommittedH=Math.max(0,committedH-completedCommittedH);
+    const tH=committedH;
+    const aS=sch.filter(t=>t.estado!=='completado'&&t.estado!=='pausa_cliente'&&t.estado!=='pruebas_cliente');
+    const activeCommittedH=remainingCommittedH;
+    const realUsage=calcProjectRealUsage(proj);
+      const pad=norm(new Date(maxD));pad.setDate(pad.getDate()+3);
+  const cd=calDays(minD,pad),ms=mSpans(cd),tcp=cd.length*DAY_PX,tpx=pxL(TODAY,minD);
+    label.textContent='Preparando...';
+    const container=document.createElement('div');
+    container.style.cssText=`position:fixed;left:-9999px;top:0;background:#fff;width:${tcp+600}px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;color:#1a1a18;`;
+    document.body.appendChild(container);
+    const now=new Date();
+    const devs=allDevs(proj);
+    container.innerHTML=`
+    <div style="padding:20px 24px;border-bottom:1px solid #d3d1c7;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+          <div style="width:12px;height:12px;border-radius:50%;background:${proj.color}"></div>
+          <div style="font-size:16px;font-weight:500;">${G.companyName||'AP-AXO'} · ${proj.name} — Plan de Proyecto</div>
+        </div>
+        <div style="font-size:11px;color:#888780;">Generado el ${now.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})}</div>
+      </div>
+      <div style="text-align:right;font-size:11px;color:#5f5e5a;">
+        <div>Inicio: ${fmt(minD)} → Fin: ${fmt(maxD)}</div>
+        <div>${wdB(minD,maxD)} días hábiles · ~${Math.ceil(wdB(minD,maxD)/5)} semanas</div>
+        <div>Backlog: ${backlogH}h · Comprometidas: ${committedH}h</div>
+        <div>${sch.filter(t=>t.estado==='completado').length}/${sch.length} completados · ${activeCommittedH}h restantes comprometidas</div>
+
+      </div>
+    </div>
+    <div style="padding:0 24px 16px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+        ${devs
+          .filter(d=>pdfTasks.some(t=>t.adev?.id===d.id))
+          .sort((a,b)=>{
+            const hA=pdfTasks.filter(t=>t.adev?.id===a.id).reduce((s,t)=>s+taskCountableHours(t),0);
+            const hB=pdfTasks.filter(t=>t.adev?.id===b.id).reduce((s,t)=>s+taskCountableHours(t),0);
+            if(hB!==hA)return hB-hA;
+            return (a.name||'').localeCompare((b.name||''),'es',{sensitivity:'base'});
+          })
+          .map(dev=>{
+            const col=gc(dev.pi||0);
+            const cur=aS.find(t=>t.adev?.id===dev.id&&t.start<=TODAY&&t.end>=TODAY);
+            const fr=df[dev.id]&&df[dev.id]<=TODAY;
+            const isG=!!G.globalDevs.find(x=>x.id===dev.id);
+            const totalHoras=pdfTasks.filter(t=>t.adev?.id===dev.id).reduce((s,t)=>s+taskCountableHours(t),0);
+            const totalTareas=pdfTasks.filter(t=>t.adev?.id===dev.id).length;
+            return `<div style="border-radius:8px;padding:7px 12px;border:0.5px solid #d3d1c7;background:#fff;border-top:3px solid ${col.bar};min-width:120px;"><div style="font-size:12px;font-weight:500;color:${col.bar};margin-bottom:2px;">${dev.name}${isG?' ★':''}</div><div style="font-size:11px;">${cur?`● En ${cur.id}`:fr?'● Disponible':'● Sin asignación activa'}</div><div style="font-size:10px;color:#888780;margin-top:2px;">${totalHoras}h · ${totalTareas} desarrollo(s)</div></div>`;
+          }).join('')}
+      </div>
+      <table style="border-collapse:collapse;font-size:11px;width:100%;">
+        <thead><tr>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:90px;">Estado</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:130px;white-space:nowrap;">ID</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;min-width:130px;">Nombre</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:32px;text-align:center;">P</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:44px;text-align:center;">Horas</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:32px;text-align:center;">Días</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:40px;text-align:center;">D.Ret</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:40px;text-align:center;">D.Pru</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:60px;">Dev</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:86px;">Inicio</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:86px;">Fin</th>
+          <th style="background:#f1efe8;padding:0;border:0.5px solid #d3d1c7;width:${tcp}px;vertical-align:top;">
+            <table style="width:100%;border-collapse:collapse;font-size:10px;">
+              <tr>${ms.map(m=>`<td colspan="${m.n}" style="background:#f1efe8;text-align:center;padding:3px 2px;border:0.5px solid #d3d1c7;font-weight:500;color:#5f5e5a;overflow:hidden;white-space:nowrap;">${m.label}</td>`).join('')}</tr>
+              <tr>${cd.map(d=>{const iT=iso(d)===iso(TODAY),iH=HOL.has(iso(d)),iW=d.getDay()===0||d.getDay()===6;const bg=iT?'#fcebeb':iH?'#faeeda':iW?'#f5f5f3':'#fff';const cl=iT?'#e24b4a':iH?'#ba7517':'#b4b2a9';return `<td style="width:${DAY_PX}px;text-align:center;padding:2px 0;font-size:9px;border:0.5px solid #d3d1c7;background:${bg};color:${cl};">${d.getDate()}</td>`;}).join('')}</tr>
+            </table>
+          </th>
+        </tr></thead>
+        <tbody>${pdfTasks.map((t,i)=>{
+          const col=gc(t.adev?.pi||0);const bg=t.estado==='completado'?'#16A34A':col.bar,fg=t.estado==='completado'?'#ffffff':col.text;
+      
+
+          const estBg=t.estado==='nuevo'?'#e6f1fb':t.estado==='aprobado'?'#f1efe8':t.estado==='completado'?'#9fe1cb':t.estado==='en_desarrollo'?'#b5d4f4':t.estado==='pausa_cliente'?'#faeeda':t.estado==='pruebas_cliente'?'#E8E3FF':t.estado==='en_garantia'?'#E3F6EE':'#f1efe8';
+          const estCl=t.estado==='nuevo'?'#0c447c':t.estado==='aprobado'?'#5f5e5a':t.estado==='completado'?'#085041':t.estado==='en_desarrollo'?'#0c447c':t.estado==='pausa_cliente'?'#633806':t.estado==='pruebas_cliente'?'#4A3B8F':t.estado==='en_garantia'?'#176B4D':'#5f5e5a';
+          const rowBg=i%2===0?'#fff':'#fafaf8';
+          return `<tr style="opacity:${t.estado==='completado'?'0.6':'1'}">
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};"><span style="background:${estBg};color:${estCl};font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;">${t.estado==='nuevo'?'Nuevo':t.estado==='aprobado'?'Aprobado':t.estado==='en_desarrollo'?'En desarrollo':t.estado==='pausa_cliente'?'Pausado':t.estado==='pruebas_cliente'?'Probando':t.estado==='completado'?'Completado':t.estado==='en_garantia'?'En Garantía':'Aprobado'}</span></td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};font-weight:500;white-space:nowrap;">${t.id}</td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};">${t.name}</td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};text-align:center;font-weight:500;">${t.pri}</td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};text-align:center;">${taskCountableHours(t)}</td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};text-align:center;color:#888780;">${t.days}</td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};text-align:center;">${Math.max(0,parseInt(t.delayDays)||0)}</td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};text-align:center;">${Math.max(0,parseInt(t.testDays)||0)}</td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};"><span style="background:${col.bar}22;color:${col.bar};font-size:10px;padding:1px 5px;border-radius:3px;font-weight:500;">${t.adev?.name||''}</span></td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};">${fmt(t.start)}</td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};">${fmt(t.end)}</td>
+            <td style="padding:0;border:0.5px solid #d3d1c7;background:${rowBg};height:24px;position:relative;">
+              <div style="position:relative;height:24px;width:${tcp}px;">
+                <div style="position:absolute;top:0;left:${tpx}px;width:${DAY_PX}px;height:24px;background:rgba(226,75,74,0.07);"></div>
+                ${(()=>{
+                  if(!t.start||!t.end)return '';
+                  const _lx=pxL(t.start,minD);
+                  const _bw=pxW(t.start,t.end);
+                  return '<div style="position:absolute;top:3px;left:'+_lx+'px;width:'+_bw+'px;height:18px;border-radius:3px;background:'+bg+';display:flex;align-items:center;padding:0 4px;font-size:9px;font-weight:500;color:'+fg+';overflow:hidden;opacity:'+((t.estado==='nuevo'||t.estado==='aprobado')?0.78:1)+';">'+(t.days>4?t.id:'')+'</div>';
+                })()}
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+        <tr><td colspan="4" style="padding:5px 7px;border:0.5px solid #d3d1c7;background:#f1efe8;font-weight:500;">Total</td>
+          <td style="padding:5px 7px;border:0.5px solid #d3d1c7;background:#f1efe8;text-align:center;font-weight:500;">${tH}</td>
+          <td colspan="7" style="border:0.5px solid #d3d1c7;background:#f1efe8;"></td>
+          <td style="padding:5px 7px;border:0.5px solid #d3d1c7;background:#f1efe8;font-size:10px;color:#888780;">${wdB(minD,maxD)} días hábiles · fin: ${fmt(maxD)}</td>
+        </tr></tbody>
+      </table>
+    </div>`;
+    label.textContent='Capturando...';
+    await new Promise(r=>setTimeout(r,120));
+    const canvas=await html2canvas(container,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,width:container.scrollWidth,height:container.scrollHeight,windowWidth:container.scrollWidth,windowHeight:container.scrollHeight});
+    document.body.removeChild(container);
+    label.textContent='Generando PDF...';
+    const{jsPDF}=jspdf;
+    const iW=canvas.width,iH=canvas.height,pW=iW/2,pH=iH/2;
+    const pdf=new jsPDF({orientation:pW>pH?'landscape':'portrait',unit:'px',format:[pW,pH]});
+    pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,pW,pH,undefined,'FAST');
+    const d=new Date();
+    pdf.save(`${proj.name}-Plan-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.pdf`);
+  }catch(err){console.error(err);alert('Error al generar PDF: '+err.message);}
+  finally{overlay.classList.remove('active');btn.disabled=false;}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENT DELEGATION
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('root').addEventListener('change',function(e){
+  if(e.target.classList.contains('dev-select')){
+    const taskId=e.target.getAttribute('data-taskid');
+    const devId=e.target.value;
+    const proj=activeProject();
+    const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
+    t.pdi=devId;
+    // User explicitly chose this dev — mark as user-assigned (not auto)
+    if(t.estado==='nuevo'||t.estado==='aprobado'){
+      t._autoPdi=false;  // user picked it
+      t.so=null;t.eo=null;t._manualSo=false;
+    }
+    saveState();render();
+    const sel=document.querySelector(`.dev-select[data-taskid="${taskId}"]`);
+    if(sel&&sel.value!==devId)sel.value=devId;
+    // Warn about overlap when dev changes on a pending task
+    if(t.estado==='nuevo'||t.estado==='aprobado'){
+      const _sch=sched(proj).sch;
+      const _newTask=_sch.find(x=>x.id===taskId);
+      const _newDev=allDevs(proj).find(d=>d.id===devId);
+      if(_newTask&&_newDev){
+        const _conf=_sch.filter(x=>x.id!==taskId&&x.estado!=='completado'&&x.adev&&x.adev.id===devId&&x.start<_newTask.end&&x.end>_newTask.start);
+        if(_conf.length>0)showToast('\u26a0 '+_newDev.name+' solapamiento con '+_conf.map(c=>c.id).join(', '),'error');
+        else showToast('\u2713 '+_newDev.name+' disponible desde '+fmt(_newTask.start),'success');
+      }
+    }
+    if(t.wiId&&devopsConfigured(proj)){
+      manualSyncWI(taskId);
+    }
+  }
+  if(e.target.classList.contains('estado-select')){
+    const taskId=e.target.getAttribute('data-taskid');
+    if(!taskId)return;
+    setE(taskId,e.target.value);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+loadState();
+// Init sidebar collapsed state
+const sb=document.getElementById('sidebar');
+if(G.sidebarCollapsed){sb.classList.add('collapsed');const btn=sb.querySelector('.sb-toggle');if(btn)btn.textContent='▶';}
+renderSidebar();
+render();
+setTimeout(initPanels,50);
+window.addEventListener('resize',()=>{
+  if(!viewingGlobalDevs)requestAnimationFrame(()=>applyRealBarPositions());
+});
+
+document.addEventListener('click',e=>{
+  const dep=document.getElementById('dep-popup');
+  const filter=document.getElementById('filter-popup');
+  if(dep&&!dep.contains(e.target)&&!e.target.closest('.dep-btn')){dep.style.display='none';dep.dataset.task='';}
+  if(filter&&!filter.contains(e.target)&&!e.target.closest('.filter-btn')){filter.style.display='none';filter.dataset.field='';}
+});
+</script>
+<div id="dep-popup" class="dep-popup"></div>
+<div id="filter-popup" class="filter-popup"></div>
+</body>
+</html>
