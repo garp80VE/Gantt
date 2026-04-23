@@ -180,8 +180,11 @@ select.cs{font-size:11px;padding:2px 3px;border-radius:3px;border:0.5px solid #b
 .dep-option:hover{background:#f5f5f3;}
 .dep-option input[type=checkbox]{width:13px;height:13px;cursor:pointer;}
 .dep-none{padding:6px 10px;font-size:12px;color:#888780;}
-.del-btn{font-size:10px;padding:1px 5px;border-radius:3px;cursor:pointer;border:0.5px solid #b4b2a9;background:#f1efe8;color:#5f5e5a;}
+.del-btn{font-size:10px;padding:1px 5px;border-radius:3px;cursor:pointer;border:0.5px solid #b4b2a9;background:#f1efe8;color:#5f5e5a;min-width:22px;width:22px;text-align:center;display:inline-flex;align-items:center;justify-content:center;}
 .del-btn:hover{background:#fcebeb;color:#a32d2d;border-color:#f09595;}
+.gantt-table-split th.col-action,.gantt-table-split td.col-action{width:28px;min-width:28px;max-width:28px;padding:2px 3px;text-align:center;}
+.gantt-table-split .total-row td{white-space:nowrap;}
+.gantt-table-split .total-row td.summary-cell{padding-left:4px;padding-right:8px;}
 .add-btn{font-size:11px;padding:3px 12px;border-radius:7px;cursor:pointer;border:0.5px solid #b4b2a9;background:#f1efe8;color:#1a1a18;font-weight:500;}
 .ov-dot{width:6px;height:6px;border-radius:50%;background:#ba7517;display:inline-block;margin-left:3px;vertical-align:middle;}
 .wi-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:1px 6px;border-radius:4px;background:#e6f1fb;color:#0c447c;text-decoration:none;font-weight:500;cursor:pointer;}
@@ -413,6 +416,8 @@ function sanitizeProject(p,i){
     } else {
       if(!t.eo && t.eoPlan)t.eo=t.eoPlan;
     }
+    if(t.wiCliente===undefined||t.wiCliente===null||String(t.wiCliente).trim()==='')t.wiCliente='S/N';
+    else t.wiCliente=String(t.wiCliente).replace(/[^0-9]/g,'').slice(0,9)||'S/N';
   });
   return p;
 }
@@ -1810,8 +1815,9 @@ function render(){
       <th style="width:118px">Inicio</th>
       <th style="width:118px">Fin</th>
       <th style="width:100px">Depende de</th>
+      <th style="width:90px">WI Cliente</th>
       <th style="width:110px">Work Item</th>
-      <th style="width:26px"></th>
+      <th class="col-action" style="width:28px"></th>
       <th style="width:${tcp}px;padding:0;vertical-align:top;border-left:1.5px solid #d3d1c7;">
         <table style="width:100%;border-collapse:collapse;font-size:10px;"><tr>
           ${ms.map(m=>'<td colspan="'+m.n+'" style="background:#f1efe8;color:#5f5e5a;font-weight:500;text-align:center;padding:3px 2px;border-right:0.5px solid #d3d1c7;border-bottom:0.5px solid #d3d1c7;white-space:nowrap;overflow:hidden;">'+m.label+'</td>').join('')}
@@ -1834,7 +1840,7 @@ function render(){
         <th><button class="filter-btn" onclick="openFilterPopup(event,'name')" title="Filtrar Nombre" style="max-width:128px;min-width:128px;">${filterButtonLabel('name',proj)}</button></th>
         <th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th>
         <th><button class="filter-btn" onclick="openFilterPopup(event,'dev')" title="Filtrar Dev" style="max-width:138px;min-width:138px;">${filterButtonLabel('dev',proj)}</button></th>
-        <th></th><th></th><th></th><th></th><th></th><th></th>
+        <th></th><th></th><th></th><th></th><th></th><th></th><th></th>
       </tr></thead><tbody>`;
 
   filteredSch.forEach(t=>{
@@ -1904,8 +1910,9 @@ function render(){
       <td><input type="date" class="ce ${hOs?'ov':''}" style="width:108px" value="${t.so||iso(t.start)}" onchange="sf('${t.id}','so',this.value||null)" ${sDis?'disabled':''}></td>
       <td><input type="date" class="ce ${hOe?'ov':''}" style="width:108px" value="${eoDisplay}" onchange="sf('${t.id}','eo',this.value||null)" ${eDis?'disabled':''}></td>
       ${dd}
+      <td><input class="ce" style="width:72px;text-align:center" maxlength="9" inputmode="numeric" value="${t.wiCliente||'S/N'}" onchange="sf('${t.id}','wiCliente',this.value)"></td>
       <td>${wiCell}</td>
-      <td><button class="del-btn" onclick="delTask('${t.id}')" ${vDis?'disabled':''}>✕</button></td>
+      <td class="col-action"><button class="del-btn" onclick="delTask('${t.id}')" ${vDis?'disabled':''}>✕</button></td>
       <td style="padding:0;height:28px;border-left:1.5px solid #d3d1c7;">
         <div style="position:relative;width:${tcp}px;height:28px;">
           <div style="position:absolute;top:0;left:${tpx}px;width:2px;height:28px;background:#e24b4a;opacity:0.35;pointer-events:none;"></div>
@@ -1967,15 +1974,17 @@ function render(){
     <td></td>
     <td></td>
     <td><select id="nd" class="cs">${aD.length===0?'<option value="">— sin devs activos —</option>':'<option value="" selected>Auto</option>'+aD.map(d=>`<option value="${d.id}">${d.name}</option>`).join('')}</select></td>
-    <td><button class="add-btn" onclick="addTask()">+ Agregar</button></td>
     <td></td>
-    <td></td><td></td>
+    <td><input id="nwi" class="ce" placeholder="S/N" style="width:72px;text-align:center"></td>
+    <td><button class="add-btn" onclick="addTask()">+ Agregar</button></td>
+    <td class="col-action"></td>
   </tr>
   <tr class="total-row">
-    <td colspan="3">Total</td><td></td>
+    <td colspan="3">Total</td>
+    <td></td>
     <td style="text-align:center">${tH}</td>
-    <td></td><td></td><td></td><td></td><td></td><td colspan="5"></td><td></td><td></td>
-    <td style="font-size:11px;color:#888780;padding-left:4px">${wdB(minD,maxD)} días hábiles · ~${tW} sem. · fin: ${fmt(maxD)}</td>
+    <td colspan="13"></td>
+    <td class="summary-cell" style="font-size:11px;color:#888780;">${wdB(minD,maxD)} días hábiles · ~${tW} sem. · fin: ${fmt(maxD)}</td>
   </tr></tbody></table></div>`;
 
   document.getElementById('root').innerHTML=h;
@@ -2117,7 +2126,12 @@ function sf(taskId,field,value){
   const proj=activeProject();
   const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
 
-  t[field]=value;
+  if(field==='wiCliente'){
+    const raw=String(value||'').trim();
+    t[field]=raw?raw.replace(/[^0-9]/g,'').slice(0,9)||'S/N':'S/N';
+  }else{
+    t[field]=value;
+  }
 
   if(field==='so'&&canSo(t)){
     t._manualSo=!!value;
@@ -2127,23 +2141,7 @@ function sf(taskId,field,value){
         t._autoPdi=false;
       }
       t.so=iso(nxWD(parseDate(value)));
-
-      if(t.estado==='pausa_cliente' || t.estado==='pruebas_cliente' || t.estado==='en_desarrollo' || t.estado==='en_garantia'){
-        const recalculatedEnd = calcEo(
-          t.so,
-          taskBaseHours(t),
-          t.pdi,
-          proj.hpd||8,
-          t.delayDays||0,
-          t.testDays||0
-        );
-        t.eo = recalculatedEnd;
-        t.eoPlan = recalculatedEnd;
-      } else {
-        t.eo=null;
-        t.eoPlan=null;
-      }
-
+      t.eo=null;
       if(t.estado==='completado')t.eoReal=t.so;
     }
     // Check if dev is busy on this date only against tasks still in progress.
@@ -2188,43 +2186,47 @@ function sf(taskId,field,value){
   if(field==='delayDays'){
     t.delayDays=Math.max(0,parseInt(value)||0);
 
-    // Changing delay days must keep the current start date fixed.
-    // Only recalculate the finish of this task.
-    if(t.estado!=='completado' && t.so){
-      const recalculatedEnd = calcEo(
-        t.so,
-        taskBaseHours(t),
-        t.pdi,
-        proj.hpd||8,
-        t.delayDays||0,
-        t.testDays||0
-      );
-      t.eo = recalculatedEnd;
-      t.eoPlan = recalculatedEnd;
-    } else if(t.estado!=='completado'){
+    // For paused/testing tasks, delay must only resize THIS task.
+    // They should stay visible but must not re-plan the rest of the dev queue.
+    if(t.estado==='pausa_cliente' || t.estado==='pruebas_cliente'){
+      if(t.so){
+        const recalculatedEnd = calcEo(
+          t.so,
+          taskBaseHours(t),
+          t.pdi,
+          proj.hpd||8,
+          t.delayDays||0,
+          t.testDays||0
+        );
+        t.eo = recalculatedEnd;
+        t.eoPlan = recalculatedEnd;
+      }
+    }else if(t.estado!=='completado'){
       t.eo=null;
-      t.eoPlan=null;
+      cascadeDevTasks(proj,t.pdi,taskId);
     }
   }
 
   if(field==='testDays'){
     t.testDays=Math.max(0,parseInt(value)||0);
 
-    // Same rule: keep start fixed and only move the finish.
-    if(t.estado!=='completado' && t.so){
-      const recalculatedEnd = calcEo(
-        t.so,
-        taskBaseHours(t),
-        t.pdi,
-        proj.hpd||8,
-        t.delayDays||0,
-        t.testDays||0
-      );
-      t.eo = recalculatedEnd;
-      t.eoPlan = recalculatedEnd;
-    } else if(t.estado!=='completado'){
+    // Same rule as delay days.
+    if(t.estado==='pausa_cliente' || t.estado==='pruebas_cliente'){
+      if(t.so){
+        const recalculatedEnd = calcEo(
+          t.so,
+          taskBaseHours(t),
+          t.pdi,
+          proj.hpd||8,
+          t.delayDays||0,
+          t.testDays||0
+        );
+        t.eo = recalculatedEnd;
+        t.eoPlan = recalculatedEnd;
+      }
+    }else if(t.estado!=='completado'){
       t.eo=null;
-      t.eoPlan=null;
+      cascadeDevTasks(proj,t.pdi,taskId);
     }
   }
 
@@ -2288,6 +2290,7 @@ function addTask(){
   const garantia=Math.max(0,parseInt(document.getElementById('nh-gar')?.value)||0);
   const total=Math.max(1,hDev+hTest+garantia);
   const ndEl=document.getElementById('nd');
+  const wiCliente=(document.getElementById('nwi')?.value||'').replace(/[^0-9]/g,'').slice(0,9)||'S/N';
   const pdi = ndEl && ndEl.value ? ndEl.value : null;
   const autoAssign = !pdi;
   if(!id||!name){alert('ID y nombre son obligatorios.');return;}
@@ -2302,6 +2305,7 @@ function addTask(){
   hTest,
   garantia,
   pri,
+  wiCliente,
   deps:[],
   pdi: autoAssign ? null : pdi,
   _autoPdi: autoAssign,
@@ -2728,6 +2732,7 @@ async function exportPDF(){
           <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:40px;text-align:center;">D.Ret</th>
           <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:40px;text-align:center;">D.Pru</th>
           <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:60px;">Dev</th>
+          <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:60px;">WI Cliente</th>
           <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:86px;">Inicio</th>
           <th style="background:#f1efe8;padding:5px 7px;border:0.5px solid #d3d1c7;width:86px;">Fin</th>
           <th style="background:#f1efe8;padding:0;border:0.5px solid #d3d1c7;width:${tcp}px;vertical-align:top;">
@@ -2754,6 +2759,7 @@ async function exportPDF(){
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};text-align:center;">${Math.max(0,parseInt(t.delayDays)||0)}</td>
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};text-align:center;">${Math.max(0,parseInt(t.testDays)||0)}</td>
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};"><span style="background:${col.bar}22;color:${col.bar};font-size:10px;padding:1px 5px;border-radius:3px;font-weight:500;">${t.adev?.name||''}</span></td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};text-align:center;">${t.wiCliente||'S/N'}</td>
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};">${fmt(t.start)}</td>
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};">${fmt(t.end)}</td>
             <td style="padding:0;border:0.5px solid #d3d1c7;background:${rowBg};height:24px;position:relative;">
@@ -2771,7 +2777,7 @@ async function exportPDF(){
         }).join('')}
         <tr><td colspan="4" style="padding:5px 7px;border:0.5px solid #d3d1c7;background:#f1efe8;font-weight:500;">Total</td>
           <td style="padding:5px 7px;border:0.5px solid #d3d1c7;background:#f1efe8;text-align:center;font-weight:500;">${tH}</td>
-          <td colspan="7" style="border:0.5px solid #d3d1c7;background:#f1efe8;"></td>
+          <td colspan="8" style="border:0.5px solid #d3d1c7;background:#f1efe8;"></td>
           <td style="padding:5px 7px;border:0.5px solid #d3d1c7;background:#f1efe8;font-size:10px;color:#888780;">${wdB(minD,maxD)} días hábiles · fin: ${fmt(maxD)}</td>
         </tr></tbody>
       </table>
