@@ -621,6 +621,63 @@ function calcProjectRealUsage(proj){
     doneCount: doneTasks.length
   };
 }
+
+function workDateAtHour(startDate,totalHours,hpd){
+  if(!startDate)return null;
+  const hours=Math.max(0,Number(totalHours)||0);
+  if(hours<=0)return new Date(startDate);
+  const days=Math.max(1,Math.ceil(hours/(hpd||8)));
+  return addWD(startDate,days);
+}
+function workHoursUntil(startDate,asOfDate,hpd){
+  if(!startDate||!asOfDate)return 0;
+  const s=norm(startDate),e=norm(asOfDate);
+  if(e<s)return 0;
+  return wdInclusive(s,e)*(hpd||8);
+}
+function calcPhaseProgress(task,proj,phaseHours,offsetHours){
+  const hpd=proj?.hpd||8;
+  const start=parseDate(task?.so||task?.start);
+  const total=Math.max(0,Number(phaseHours)||0);
+  const offset=Math.max(0,Number(offsetHours)||0);
+  const elapsed=workHoursUntil(start,TODAY,hpd);
+  const current=Math.max(0,Math.min(total,elapsed-offset));
+  const pct=total>0?Math.min(100,Math.round((current/total)*100)):0;
+  const maxDate=workDateAtHour(start,offset+total,hpd);
+  return {pct,current,total,maxDate};
+}
+function phaseLine(label,data){
+  const dateTxt=data.maxDate?fmt(data.maxDate):'—';
+  return '⬡ '+label+': '+data.pct+'% <span style="color:#888780;font-weight:400;">(hora '+data.current+'/'+data.total+') ('+dateTxt+')</span>';
+}
+function colorByPct(pct){
+  return pct>=100?'#e24b4a':pct>=75?'#ba7517':'#1d9e75';
+}
+function calcTaskPhaseProgress(task,proj){
+  const hpd=proj?.hpd||8;
+  const delayHours=taskDelayHours(task,proj);
+  const dPruHours=taskTestDaysHours(task,proj);
+  const baseOffset=delayHours+dPruHours;
+  const hDev=Math.max(0,Number(task?.hDev)||0);
+  const hTest=Math.max(0,Number(task?.hTest)||0);
+  const hGar=Math.max(0,Number(task?.garantia)||0);
+  const dev=calcPhaseProgress(task,proj,hDev,baseOffset);
+  const test=calcPhaseProgress(task,proj,hTest,baseOffset+hDev);
+  const gen=calcPhaseProgress(task,proj,hGar,baseOffset+hDev+hTest);
+  return {dev,test,gen};
+}
+
+function calcTaskConsumedSummary(task,proj){
+  if(!task||!task.so)return {hoursConsumed:0,hoursTotal:0,daysConsumed:0,daysTotal:0};
+  const hpd=proj?.hpd||8;
+  const start=parseDate(task.so||task.start);
+  const totalHours=Math.max(1,taskBaseHours(task)+taskDelayHours(task,proj)+taskTestDaysHours(task,proj));
+  const daysTotal=Math.max(1,taskScheduleDays(task,proj));
+  const rawDays=start?Math.max(0,wdInclusive(start,TODAY)):0;
+  const daysConsumed=Math.max(0,Math.min(daysTotal,rawDays));
+  const hoursConsumed=Math.max(0,Math.min(totalHours,daysConsumed*hpd));
+  return {hoursConsumed,hoursTotal:totalHours,daysConsumed,daysTotal};
+}
 function gc(pi){return PAL[pi%PAL.length];}
 function dByI(id,proj){return (proj.devs||[]).find(d=>d.id===id)||G.globalDevs.find(d=>d.id===id);}
 function locked(t){return t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia';}
@@ -1758,35 +1815,14 @@ function render(){
       <div class="dc-avail" style="color:${(dev.avail??100)<50?'#ba7517':'#888780'}">⬡ ${dev.avail??100}% disponibilidad</div>
       <div class="dc-next">${nxt?`Próximo: ${nxt.id} (${fmt(nxt.start)})`:'Sin tareas siguientes'}</div>
       ${(()=>{
-        if(!cur)return '';
-        const hpd=proj.hpd||8;
-        const delayHours=taskDelayHours(cur,proj);
-        const testDaysHours=taskTestDaysHours(cur,proj);
-        const hDevTest=((cur.hDev||0)+(cur.hTest||0)+delayHours+testDaysHours);
-        const hGen=((cur.hDev||0)+(cur.hTest||0)+(cur.garantia||0)+delayHours+testDaysHours);
-        if(!hDevTest||!cur.so)return '';
-
-        const diasDev=Math.max(1,Math.ceil(hDevTest/hpd));
-        const diasGen=Math.max(1,Math.ceil(Math.max(1,hGen)/hpd));
-        const inicio=parseDate(cur.so);
-
-        let diasTranscurridos=0;
-        if(TODAY>=inicio){
-          diasTranscurridos=wdB(inicio,TODAY)+(isWD(inicio)?1:0);
-        }
-
-        const horasConsumidas=diasTranscurridos*hpd;
-        const pctDev=Math.min(100,Math.round(horasConsumidas/hDevTest*100));
-        const pctGen=Math.min(100,Math.round(horasConsumidas/Math.max(1,hGen)*100));
-
-        const colorDev=pctDev>=100?'#e24b4a':pctDev>=75?'#ba7517':'#1d9e75';
-        const colorGen=pctGen>=100?'#e24b4a':pctGen>=75?'#ba7517':'#1d9e75';
-
+        if(!cur||!cur.so)return '';
+        const p=calcTaskPhaseProgress(cur,proj);
         return ''
-          + '<div style="font-size:11px;margin-top:3px;color:'+colorDev+';font-weight:500;">⬡ Avance dev: '+pctDev+'% <span style="color:#888780;font-weight:400;">(día '+diasTranscurridos+'/'+diasDev+')</span></div>'
-          + '<div style="font-size:11px;margin-top:2px;color:'+colorGen+';font-weight:500;">⬡ Avance Gen: '+pctGen+'% <span style="color:#888780;font-weight:400;">(día '+diasTranscurridos+'/'+diasGen+')</span></div>';
+          + '<div style="font-size:11px;margin-top:3px;color:'+colorByPct(p.dev.pct)+';font-weight:500;">'+phaseLine('Avance dev',p.dev)+'</div>'
+          + '<div style="font-size:11px;margin-top:2px;color:'+colorByPct(p.test.pct)+';font-weight:500;">'+phaseLine('Avance Test',p.test)+'</div>'
+          + '<div style="font-size:11px;margin-top:2px;color:'+colorByPct(p.gen.pct)+';font-weight:500;">'+phaseLine('Avance Gen',p.gen)+'</div>';
       })()}
-      ${l&&l.hours>0&&G.globalDevs.find(x=>x.id===dev.id)?'<div style="font-size:11px;color:#5f5e5a;margin-top:2px;">Total cruzado: '+l.hours+'h</div>':''}
+      ${cur?(()=>{const c=calcTaskConsumedSummary(cur,proj);return '<div style="font-size:11px;color:#5f5e5a;margin-top:2px;">Total consumido: '+c.hoursConsumed+'/'+c.hoursTotal+'h · días '+c.daysConsumed+'/'+c.daysTotal+'</div>';})():''}
     </div>`;
   });
 
