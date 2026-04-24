@@ -2114,6 +2114,31 @@ function calcEo(so,total,dev,hpd,delayDays=0,testDays=0){
   return iso(addWD(parseDate(so),days));
 }
 
+function recalcTaskPlanEnd(proj,t,changedTaskId=null){
+  // Recalculate and persist the planned end date used by both the Fin field and the Gantt bar.
+  if(!proj||!t||t.estado==='completado')return;
+
+  if(t.so){
+    const recalculatedEnd = calcEo(
+      t.so,
+      taskBaseHours(t),
+      t.pdi,
+      proj.hpd||8,
+      t.delayDays||0,
+      t.testDays||0
+    );
+    t.eo = recalculatedEnd;
+    t.eoPlan = recalculatedEnd;
+  }else{
+    t.eo = null;
+    t.eoPlan = null;
+  }
+
+  const idToCascade = changedTaskId || t.id;
+  cascadeDevTasks(proj,t.pdi,idToCascade);
+  cascadeDependentTasks(proj,idToCascade);
+}
+
 function sfH(taskId,field,value){
   const proj=activeProject();
   const t=proj.tasks.find(x=>x.id===taskId);if(!t)return;
@@ -2185,49 +2210,12 @@ function sf(taskId,field,value){
 
   if(field==='delayDays'){
     t.delayDays=Math.max(0,parseInt(value)||0);
-
-    // For paused/testing tasks, delay must only resize THIS task.
-    // They should stay visible but must not re-plan the rest of the dev queue.
-    if(t.estado==='pausa_cliente' || t.estado==='pruebas_cliente'){
-      if(t.so){
-        const recalculatedEnd = calcEo(
-          t.so,
-          taskBaseHours(t),
-          t.pdi,
-          proj.hpd||8,
-          t.delayDays||0,
-          t.testDays||0
-        );
-        t.eo = recalculatedEnd;
-        t.eoPlan = recalculatedEnd;
-      }
-    }else if(t.estado!=='completado'){
-      t.eo=null;
-      cascadeDevTasks(proj,t.pdi,taskId);
-    }
+    recalcTaskPlanEnd(proj,t,taskId);
   }
 
   if(field==='testDays'){
     t.testDays=Math.max(0,parseInt(value)||0);
-
-    // Same rule as delay days.
-    if(t.estado==='pausa_cliente' || t.estado==='pruebas_cliente'){
-      if(t.so){
-        const recalculatedEnd = calcEo(
-          t.so,
-          taskBaseHours(t),
-          t.pdi,
-          proj.hpd||8,
-          t.delayDays||0,
-          t.testDays||0
-        );
-        t.eo = recalculatedEnd;
-        t.eoPlan = recalculatedEnd;
-      }
-    }else if(t.estado!=='completado'){
-      t.eo=null;
-      cascadeDevTasks(proj,t.pdi,taskId);
-    }
+    recalcTaskPlanEnd(proj,t,taskId);
   }
 
   saveState();render();
@@ -2238,9 +2226,39 @@ function cascadeDevTasks(proj,devId,changedTaskId){
   if(!devId)return;
   proj.tasks.forEach(t=>{
     if(t.id!==changedTaskId&&t.pdi===devId&&t.estado!=='completado'&&!t._manualSo){
-      t.so=null;t.eo=null;
+      t.so=null;t.eo=null;t.eoPlan=null;
     }
   });
+}
+
+function cascadeDependentTasks(proj,changedTaskId){
+  // If a task changes its finish date, every dependent task must be recalculated too.
+  if(!proj||!changedTaskId)return;
+  const pending=[changedTaskId];
+  const seen=new Set();
+  while(pending.length){
+    const parentId=pending.shift();
+    proj.tasks.forEach(t=>{
+      if(
+        !seen.has(t.id) &&
+        t.id!==changedTaskId &&
+        Array.isArray(t.deps) &&
+        t.deps.includes(parentId) &&
+        t.estado!=='completado'
+      ){
+        if(!t._manualSo){
+          t.so=null;
+          t.eo=null;
+          t.eoPlan=null;
+        }else{
+          t.eo=null;
+          t.eoPlan=null;
+        }
+        seen.add(t.id);
+        pending.push(t.id);
+      }
+    });
+  }
 }
 
 function sfId(oldId,newId){
