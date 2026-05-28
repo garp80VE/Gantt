@@ -282,6 +282,10 @@ select.cs{font-size:11px;padding:2px 3px;border-radius:3px;border:0.5px solid #b
       <span>👥</span>
       <span class="sb-collapsed-hide">Devs globales</span>
     </div>
+    <div class="sb-devs-link" id="sb-load-link" onclick="showTeamLoad()">
+      <span>📊</span>
+      <span class="sb-collapsed-hide">Carga del equipo</span>
+    </div>
     <div class="sb-bottom-btn" onclick="exportAllJSON()">
       <span>↓</span>
       <span class="sb-collapsed-hide">Exportar todo</span>
@@ -303,6 +307,8 @@ select.cs{font-size:11px;padding:2px 3px;border-radius:3px;border:0.5px solid #b
     </div>
     <div class="header-actions">
       <button class="hbtn primary" id="btn-pdf" onclick="exportPDF()">↓ PDF</button>
+      <button class="hbtn primary" id="btn-xlsx" onclick="exportExcel()">↓ Excel</button>
+      <button class="hbtn" id="btn-audit" onclick="exportAudit()">↓ Auditoría</button>
       <button class="hbtn" onclick="exportCurrentJSON()">↓ JSON</button>
       <button class="hbtn" onclick="renameCurrentProject()">✎ Renombrar</button>
       <button class="hbtn danger" onclick="confirmResetProject()">Reiniciar</button>
@@ -318,6 +324,7 @@ select.cs{font-size:11px;padding:2px 3px;border-radius:3px;border:0.5px solid #b
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -343,7 +350,7 @@ const DEF_PROJECT={id:'',name:'Proyecto',color:'#378ADD',globalStart:'2026-03-20
 // STATE
 // ═══════════════════════════════════════════════════════════════
 let G; // { projects:[...], globalDevs:[...], activeProjectId, sidebarCollapsed }
-let openDrop=null, saveTimer=null, viewingGlobalDevs=false;
+let openDrop=null, saveTimer=null, viewingGlobalDevs=false, viewingTeamLoad=false;
 
 function activeProject(){return G.projects.find(p=>p.id===G.activeProjectId)||G.projects[0];}
 
@@ -405,6 +412,11 @@ function sanitizeProject(p,i){
     t.delayDays=Math.max(0,parseInt(t.delayDays)||0);
     if(t.testDays===undefined||t.testDays===null||isNaN(t.testDays))t.testDays=0;
     t.testDays=Math.max(0,parseInt(t.testDays)||0);
+    if(t.eoDev===undefined)t.eoDev=null;
+    if(t.horasRetrabajo===undefined||t.horasRetrabajo===null||isNaN(t.horasRetrabajo))t.horasRetrabajo=0;
+    t.horasRetrabajo=Math.max(0,Number(t.horasRetrabajo)||0);
+    if(t._reworkStart===undefined)t._reworkStart=null;
+    if(!Array.isArray(t.cycleEvents))t.cycleEvents=[];
     if(t.estado==='terminado')t.estado='completado';
     if(t.estado==='pausado')t.estado='pausa_cliente';
     if(t.estado==='pendiente')t.estado='aprobado';
@@ -535,7 +547,7 @@ function wdInclusive(a,b){
   return wdB(s,e)+(isWD(s)?1:0);
 }
 function taskBaseHours(task){
-  return Math.max(1,((task?.hDev)||0)+((task?.hTest)||0)+((task?.garantia)||0));
+  return ((task?.hDev)||0)+((task?.hTest)||0)+((task?.garantia)||0);
 }
 function taskDelayHours(task,proj){
   return Math.max(0,parseInt(task?.delayDays)||0)*(proj?.hpd||8);
@@ -562,41 +574,113 @@ function taskDisplayDays(task,proj){
   return Math.max(1,Math.ceil(taskBaseHours(task)/hpd));
 }
 function calcTaskRealUsage(task,proj){
-  if(!task||task.estado!=='completado')return {hoursReal:0,daysReal:0,hoursCalendar:0,delayHours:0,testDaysHours:0,hoursAvailable:0,devUsed:0,testUsed:0,garUsed:0,devRemaining:0,testRemaining:0,garRemaining:0};
+  const zero={hoursReal:0,daysReal:0,hoursCalendar:0,delayHours:0,testDaysHours:0,hoursAvailable:0,devUsed:0,testUsed:0,garUsed:0,devRemaining:0,testRemaining:0,garRemaining:0,availPct:100,startDate:null,endDate:null,committed:0,reworkHours:0,mode:'none',eoDev:null,eoReal:null};
+  if(!task)return zero;
+  const hasEoDev=!!task.eoDev;
+  const isDone=task.estado==='completado';
+  // Calcular si: (a) tiene eoDev (entregada), o (b) está completada (con eoReal aunque sin eoDev)
+  if(!hasEoDev&&!isDone)return zero;
 
   const hpd=proj?.hpd||8;
   const hDev=task.hDev||0;
   const hTest=task.hTest||0;
   const hGar=task.garantia||0;
+  const committed=hDev+hTest+hGar;
   const start=parseDate(task.so||task.start);
-  const end=parseDate(task.eoReal||task.eo||task.eoPlan||task.end||task.so);
-  const hoursCalendar=(start&&end)?Math.max(0,wdInclusive(start,end)*hpd):0;
+  const reworkHours=Math.max(0,Number(task.horasRetrabajo)||0);
+
+  const dev=dByI(task.pdi,proj);
+  const ov=(proj?.globalDevOverrides||{})[task.pdi]||{};
+  const availPct=Math.max(0,Math.min(100,ov.avail??dev?.avail??100));
+
   const delayHours=taskDelayHours(task,proj);
   const testDaysHours=taskTestDaysHours(task,proj);
-  const hoursAvailable=Math.max(0,hoursCalendar-delayHours-testDaysHours);
 
-  let remainingWindow=hoursAvailable;
-  const devUsed=Math.min(hDev,remainingWindow);
-  remainingWindow=Math.max(0,remainingWindow-devUsed);
-  const testUsed=Math.min(hTest,remainingWindow);
-  remainingWindow=Math.max(0,remainingWindow-testUsed);
-  const garUsed=Math.min(hGar,remainingWindow);
-  const hoursReal=devUsed+testUsed+garUsed;
-  const daysReal=Math.ceil(hoursReal/hpd);
+  let mode,endForCalc,hoursCalendar,hoursOriginal,hoursReal,hoursAvailable;
+
+  if(task.eoDev){
+    // PRECISO: trabajo original = so → eoDev (sin cliente). Retrabajo = sumatoria.
+    mode='eoDev';
+    endForCalc=parseDate(task.eoDev);
+    const calDays=(start&&endForCalc)?Math.max(0,wdInclusive(start,endForCalc)):0;
+    hoursCalendar=Math.round(calDays*hpd*(availPct/100));
+    hoursOriginal=hoursCalendar;
+    hoursReal=hoursOriginal+reworkHours;
+    hoursAvailable=hoursReal;
+  }else{
+    // APROXIMADO (legacy/sin eoDev): ventana calendario − cliente, capada al comprometido
+    mode='approx';
+    endForCalc=parseDate(task.eoReal||task.eo||task.eoPlan||task.end||task.so);
+    const calDays=(start&&endForCalc)?Math.max(0,wdInclusive(start,endForCalc)):0;
+    hoursCalendar=Math.round(calDays*hpd*(availPct/100));
+    hoursAvailable=Math.max(0,hoursCalendar-delayHours-testDaysHours);
+    const ratio=committed>0?Math.min(1,hoursAvailable/committed):0;
+    hoursOriginal=Math.round(committed*ratio);
+    hoursReal=hoursOriginal+reworkHours;
+  }
+
+  // Conteo de ciclos de rebote
+  const ciclos=Array.isArray(task.cycleEvents)?task.cycleEvents.filter(c=>c.tipo==='reentrega').length:0;
+
+  // Reparto por fase: proporcional al peso de cada fase en el comprometido
+  const devW=committed>0?hDev/committed:0;
+  const testW=committed>0?hTest/committed:0;
+  const devUsed=Math.round(hoursReal*devW);
+  const testUsed=Math.round(hoursReal*testW);
+  const garUsed=Math.max(0,hoursReal-devUsed-testUsed);
+  const daysReal=hpd>0?Math.ceil(hoursReal/hpd):0;
 
   return {
-    hoursReal,
-    daysReal,
-    hoursCalendar,
-    delayHours,
-    testDaysHours,
-    hoursAvailable,
-    devUsed,
-    testUsed,
-    garUsed,
+    hoursReal,hoursOriginal,daysReal,hoursCalendar,delayHours,testDaysHours,hoursAvailable,
+    devUsed,testUsed,garUsed,
     devRemaining:Math.max(0,hDev-devUsed),
     testRemaining:Math.max(0,hTest-testUsed),
-    garRemaining:Math.max(0,hGar-garUsed)
+    garRemaining:Math.max(0,hGar-garUsed),
+    availPct,startDate:start,endDate:endForCalc,committed,
+    reworkHours,ciclos,mode,
+    eoDev:task.eoDev||null,
+    eoReal:task.eoReal||null,
+    cycleEvents:Array.isArray(task.cycleEvents)?task.cycleEvents:[]
+  };
+}
+
+function calcDevRealUsage(devId,proj){
+  const tasks=(proj.tasks||[]).filter(t=>t.pdi===devId);
+  const handedOffStates=['pruebas_cliente','completado','en_garantia'];
+  const delivered=tasks.filter(t=>handedOffStates.includes(t.estado)||t.eoDev);
+  const done=tasks.filter(t=>t.estado==='completado');
+  const committedAll=tasks.reduce((s,t)=>s+taskBaseHours(t),0);
+  const committedDelivered=delivered.reduce((s,t)=>s+taskBaseHours(t),0);
+  const committedDone=done.reduce((s,t)=>s+taskBaseHours(t),0);
+
+  // Cerradas (cliente confirmó)
+  const usageDone=done.map(t=>calcTaskRealUsage(t,proj));
+  const hoursReal=usageDone.reduce((s,u)=>s+u.hoursReal,0);
+  const delta=committedDone-hoursReal;
+  const savings=Math.max(0,delta);
+  const overrun=Math.max(0,-delta);
+  const deltaPct=committedDone>0?Math.round((delta/committedDone)*100):0;
+
+  // Entregadas (dev terminó su trabajo, métrica de rendimiento del equipo)
+  const usageDelivered=delivered.map(t=>calcTaskRealUsage(t,proj));
+  const hoursOriginalDelivered=usageDelivered.reduce((s,u)=>s+(u.hoursOriginal||0),0);
+  const hoursRetrabajoDelivered=usageDelivered.reduce((s,u)=>s+(u.reworkHours||0),0);
+  const hoursRealDelivered=usageDelivered.reduce((s,u)=>s+u.hoursReal,0);
+  const ciclosTotal=usageDelivered.reduce((s,u)=>s+(u.ciclos||0),0);
+  const deltaDelivered=committedDelivered-hoursRealDelivered;
+  const savingsDelivered=Math.max(0,deltaDelivered);
+  const overrunDelivered=Math.max(0,-deltaDelivered);
+  const deltaPctDelivered=committedDelivered>0?Math.round((deltaDelivered/committedDelivered)*100):0;
+
+  return {
+    committedAll,committedDelivered,committedDone,
+    // Cerradas
+    hoursReal,delta,savings,overrun,deltaPct,savingsPct:Math.max(0,deltaPct),
+    // Entregadas (rendimiento equipo)
+    hoursRealDelivered,hoursOriginalDelivered,hoursRetrabajoDelivered,ciclosTotal,
+    deltaDelivered,savingsDelivered,overrunDelivered,deltaPctDelivered,
+    // Conteos
+    doneCount:done.length,deliveredCount:delivered.length,taskCount:tasks.length
   };
 }
 function calcProjectRealUsage(proj){
@@ -611,6 +695,13 @@ function calcProjectRealUsage(proj){
   const remGar=usageList.reduce((s,u)=>s+u.garRemaining,0);
   const remainingReal=remDev+remTest+remGar;
 
+  // Costo retrabajo proyecto (todas las tareas, no solo done)
+  const retrabajoTotal=tasks.reduce((s,t)=>s+(Math.max(0,Number(t.horasRetrabajo)||0)),0);
+  const ciclosTotal=tasks.reduce((s,t)=>{
+    return s+(Array.isArray(t.cycleEvents)?t.cycleEvents.filter(c=>c.tipo==='reentrega').length:0);
+  },0);
+  const tasksWithRework=tasks.filter(t=>(Number(t.horasRetrabajo)||0)>0).length;
+
   return {
     totalEstimated,
     hoursReal,
@@ -618,7 +709,10 @@ function calcProjectRealUsage(proj){
     remTest,
     remGar,
     remainingReal,
-    doneCount: doneTasks.length
+    doneCount: doneTasks.length,
+    retrabajoTotal,
+    ciclosTotal,
+    tasksWithRework
   };
 }
 
@@ -794,6 +888,21 @@ function sched(proj){
   // df[devId] = next free date
   const df={};
   devs.forEach(d=>df[d.id]=new Date(gs));
+
+  // Cross-project: el df arranca en max(globalStart, último fin del dev en OTROS proyectos)
+  // Así una tarea nueva en este proyecto NO se solapa con compromisos vigentes ajenos.
+  devs.forEach(d=>{
+    G.projects.forEach(otherP=>{
+      if(otherP.id===proj.id)return;
+      (otherP.tasks||[]).forEach(ot=>{
+        if(ot.pdi!==d.id)return;
+        if(ot.estado==='completado'||ot.estado==='nuevo'||ot.estado==='aprobado')return;
+        if(!ot.eo)return;
+        const freeFrom=nextWD(parseDate(ot.eo));
+        if(freeFrom>df[d.id])df[d.id]=new Date(freeFrom);
+      });
+    });
+  });
 
   // lockedHours[devId] = hours already committed in en_desarrollo/terminado
   const lockedHours={};
@@ -1016,6 +1125,60 @@ function sched(proj){
 // ═══════════════════════════════════════════════════════════════
 // CROSS-PROJECT LOAD ANALYSIS
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// MULTI-PROJECT DEV SCHEDULE
+// ═══════════════════════════════════════════════════════════════
+function getDevSchedule(devId){
+  // Devuelve todos los compromisos del dev en TODOS los proyectos, ordenados por fecha
+  const events=[];
+  G.projects.forEach(p=>{
+    (p.tasks||[]).forEach(t=>{
+      if(t.pdi!==devId)return;
+      const startStr=t.so;
+      const endStr=t.estado==='completado'?(t.eoReal||t.eo||t.eoPlan):(t.eo||t.eoPlan);
+      if(!startStr||!endStr)return;
+      events.push({
+        projectId:p.id,
+        projectName:p.name,
+        projectColor:p.color||'#888780',
+        taskId:t.id,
+        taskName:t.name||'',
+        estado:t.estado,
+        startDate:parseDate(startStr),
+        endDate:parseDate(endStr),
+        startStr,
+        endStr,
+        hours:taskBaseHours(t),
+        eoDev:t.eoDev||null
+      });
+    });
+  });
+  return events.sort((a,b)=>a.startDate-b.startDate);
+}
+
+function getDevNextFree(devId,fromDate){
+  // Primer día hábil libre del dev considerando todos los proyectos
+  const from=norm(fromDate||TODAY);
+  const schedule=getDevSchedule(devId);
+  const active=schedule.filter(e=>e.estado!=='completado'&&e.endDate>=from);
+  if(!active.length)return nxWD(from);
+  let latest=from;
+  active.forEach(e=>{if(e.endDate>latest)latest=e.endDate;});
+  return nextWD(latest);
+}
+
+function getDevConflicts(devId,startDate,endDate,excludeKey){
+  // Tareas del dev que se solapan con la ventana [startDate, endDate]
+  if(!startDate||!endDate)return [];
+  const s=norm(startDate),e=norm(endDate);
+  return getDevSchedule(devId).filter(ev=>{
+    const key=ev.projectId+':'+ev.taskId;
+    if(excludeKey&&key===excludeKey)return false;
+    if(ev.estado==='completado')return false;
+    return ev.startDate<=e&&ev.endDate>=s;
+  });
+}
+
 function crossProjectLoad(){
   // Cross-project load: sum hours per global dev across ALL projects (for overload warnings)
   const loads={};
@@ -1108,7 +1271,7 @@ function renderSidebar(){
   const list=document.getElementById('sb-proj-list');
   if(!list)return;
   list.innerHTML=G.projects.map(p=>`
-    <div class="sb-proj ${p.id===G.activeProjectId&&!viewingGlobalDevs?'active':''}" onclick="switchProject('${p.id}')" style="padding-right:4px;">
+    <div class="sb-proj ${p.id===G.activeProjectId&&!viewingGlobalDevs&&!viewingTeamLoad?'active':''}" onclick="switchProject('${p.id}')" style="padding-right:4px;">
       <span class="sb-proj-dot" style="background:${p.color}"></span>
       <span class="sb-proj-name">${p.name}</span>
       <span class="sb-proj-tasks">${p.tasks.length}</span>
@@ -1132,20 +1295,26 @@ function renderSidebar(){
   }
   const devLink=document.getElementById('sb-devs-link');
   if(devLink)devLink.classList.toggle('active',viewingGlobalDevs);
+  const loadLink=document.getElementById('sb-load-link');
+  if(loadLink)loadLink.classList.toggle('active',viewingTeamLoad);
   // header
-  if(!viewingGlobalDevs){
+  if(!viewingGlobalDevs&&!viewingTeamLoad){
     const proj=activeProject();
     document.getElementById('hdr-dot').style.background=proj.color;
     document.getElementById('hdr-name').textContent=proj.name+' — Plan de Proyecto';
-  }else{
+  }else if(viewingGlobalDevs){
     document.getElementById('hdr-dot').style.background='#888780';
     document.getElementById('hdr-name').textContent='Desarrolladores Globales';
+  }else{
+    document.getElementById('hdr-dot').style.background='#0c447c';
+    document.getElementById('hdr-name').textContent='Carga del Equipo (Multi-Proyecto)';
   }
 }
 
 function switchProject(id){
   G.activeProjectId=id;
   viewingGlobalDevs=false;
+  viewingTeamLoad=false;
   saveState();
   renderSidebar();
   render();
@@ -1158,7 +1327,7 @@ function deleteProject(id){
     `¿Eliminar <strong>${p.name}</strong> y todas sus tareas? Esta acción no se puede deshacer.`,
     ()=>{
       G.projects=G.projects.filter(x=>x.id!==id);
-      if(G.activeProjectId===id){G.activeProjectId=G.projects[0].id;viewingGlobalDevs=false;}
+      if(G.activeProjectId===id){G.activeProjectId=G.projects[0].id;viewingGlobalDevs=false;viewingTeamLoad=false;}
       saveState();renderSidebar();render();
       showToast(`Proyecto "${p.name}" eliminado`,'success');
     }
@@ -1189,8 +1358,16 @@ function editCompanyName(){
 
 function showGlobalDevs(){
   viewingGlobalDevs=true;
+  viewingTeamLoad=false;
   renderSidebar();
   renderGlobalDevsView();
+}
+
+function showTeamLoad(){
+  viewingTeamLoad=true;
+  viewingGlobalDevs=false;
+  renderSidebar();
+  renderTeamLoadView();
 }
 
 function newProject(){
@@ -1244,6 +1421,108 @@ function confirmResetProject(){
     proj.tasks=[];proj.devs=[];
     saveState();renderSidebar();render();
   });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TEAM LOAD VIEW (multi-proyecto)
+// ═══════════════════════════════════════════════════════════════
+function renderTeamLoadView(){
+  const root=document.getElementById('root');
+  const devs=G.globalDevs.filter(d=>d.active!==false);
+  if(!devs.length){
+    root.innerHTML='<div style="padding:30px;color:#888780;font-size:14px;">No hay desarrolladores activos.</div>';
+    return;
+  }
+
+  // Recopilar todos los eventos de todos los devs
+  const devSchedules=devs.map(d=>({dev:d,events:getDevSchedule(d.id)}));
+  const allEvents=devSchedules.flatMap(ds=>ds.events);
+
+  // Rango temporal: desde min(inicios) o hoy (lo que sea menor) hasta max(fines)+padding
+  let minD=norm(TODAY),maxD=norm(TODAY);
+  allEvents.forEach(e=>{
+    if(e.startDate<minD)minD=norm(e.startDate);
+    if(e.endDate>maxD)maxD=norm(e.endDate);
+  });
+  // Padding visual: 7 días antes, 14 después
+  const startView=new Date(minD);startView.setDate(startView.getDate()-7);
+  const endView=new Date(maxD);endView.setDate(endView.getDate()+14);
+  const cd=calDays(startView,endView),ms=mSpans(cd),tcp=cd.length*DAY_PX;
+  const todayPx=pxL(TODAY,startView);
+
+  // Header con leyenda de proyectos
+  const projLegend=G.projects.map(p=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#5f5e5a;"><span style="width:10px;height:10px;border-radius:50%;background:${p.color}"></span>${p.name}</span>`).join(' ');
+
+  let h=`<div style="padding:14px 20px 20px;">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;flex-wrap:wrap;">
+      <h2 style="font-size:16px;font-weight:500;margin:0;">Carga del equipo · multi-proyecto</h2>
+      <span style="font-size:11px;color:#888780;">Rango: ${fmt(startView)} → ${fmt(endView)}</span>
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;padding:8px 12px;background:#fafaf8;border:0.5px solid #d3d1c7;border-radius:6px;">
+      <span style="font-size:11px;color:#5f5e5a;font-weight:500;">Proyectos:</span>${projLegend}
+    </div>
+    <div style="overflow-x:auto;border:0.5px solid #d3d1c7;border-radius:6px;background:#fff;">
+      <table style="border-collapse:collapse;font-size:11px;width:max-content;min-width:100%;">
+        <thead>
+          <tr>
+            <th style="position:sticky;left:0;background:#f1efe8;padding:6px 10px;border:0.5px solid #d3d1c7;text-align:left;min-width:160px;z-index:2;">Desarrollador</th>
+            <th style="background:#f1efe8;padding:6px 10px;border:0.5px solid #d3d1c7;min-width:130px;">Próximo libre</th>
+            <th style="background:#f1efe8;padding:6px 10px;border:0.5px solid #d3d1c7;min-width:60px;text-align:center;">Activos</th>
+            <th style="padding:0;border:0.5px solid #d3d1c7;background:#f1efe8;width:${tcp}px;vertical-align:top;">
+              <table style="width:100%;border-collapse:collapse;font-size:10px;">
+                <tr>${ms.map(m=>`<td colspan="${m.n}" style="background:#f1efe8;text-align:center;padding:3px 2px;border:0.5px solid #d3d1c7;font-weight:500;color:#5f5e5a;white-space:nowrap;">${m.label}</td>`).join('')}</tr>
+                <tr>${cd.map(d=>{const iT=iso(d)===iso(TODAY),iH=HOL.has(iso(d)),iW=d.getDay()===0||d.getDay()===6;const bg=iT?'#fcebeb':iH?'#faeeda':iW?'#f5f5f3':'#fff';const cl=iT?'#e24b4a':iH?'#ba7517':'#b4b2a9';return `<td style="width:${DAY_PX}px;text-align:center;padding:2px 0;font-size:9px;border:0.5px solid #d3d1c7;background:${bg};color:${cl};">${d.getDate()}</td>`;}).join('')}</tr>
+              </table>
+            </th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+  devSchedules.forEach(({dev,events})=>{
+    const col=gc(dev.pi||0);
+    const nextFree=getDevNextFree(dev.id,TODAY);
+    const active=events.filter(e=>e.estado!=='completado'&&e.endDate>=norm(TODAY)).length;
+    const nextFreeColor=norm(nextFree)<=norm(TODAY)?'#176B4D':'#0c447c';
+
+    h+=`<tr>
+      <td style="position:sticky;left:0;background:#fff;padding:8px 10px;border:0.5px solid #d3d1c7;font-weight:500;z-index:1;">
+        <span style="display:inline-flex;align-items:center;gap:6px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:${col.bar}"></span>
+          ${dev.name}
+        </span>
+        <div style="font-size:9px;color:#888780;margin-top:2px;">${dev.avail??100}% avail</div>
+      </td>
+      <td style="padding:8px 10px;border:0.5px solid #d3d1c7;color:${nextFreeColor};font-weight:500;">${fmt(nextFree)}</td>
+      <td style="padding:8px 10px;border:0.5px solid #d3d1c7;text-align:center;color:${active>0?'#0c447c':'#888780'};">${active}</td>
+      <td style="padding:0;border:0.5px solid #d3d1c7;background:#fafaf8;position:relative;height:34px;">
+        <div style="position:relative;width:${tcp}px;height:34px;">
+          <div style="position:absolute;top:0;left:${todayPx}px;width:2px;height:34px;background:#e24b4a;opacity:0.35;pointer-events:none;z-index:1;"></div>`;
+
+    // Barras de tareas, apiladas si hay solapes (algoritmo simple: lanes)
+    const lanes=[];
+    events.forEach(ev=>{
+      const left=pxL(ev.startDate,startView);
+      const width=pxW(ev.startDate,ev.endDate);
+      let laneIdx=lanes.findIndex(laneEnd=>laneEnd<=left);
+      if(laneIdx===-1){laneIdx=lanes.length;lanes.push(0);}
+      lanes[laneIdx]=left+width;
+      const top=2+laneIdx*15;
+      const isDone=ev.estado==='completado';
+      const op=isDone?0.5:1;
+      const tip=`${ev.projectName} · ${ev.taskId}: ${ev.taskName}\n${ev.estado} · ${ev.hours}h · ${fmt(ev.startDate)} → ${fmt(ev.endDate)}`;
+      h+=`<div style="position:absolute;left:${left}px;top:${top}px;width:${width}px;height:13px;background:${ev.projectColor};border:0.5px solid rgba(0,0,0,0.15);border-radius:2px;opacity:${op};font-size:8px;color:#fff;padding:0 3px;overflow:hidden;white-space:nowrap;cursor:pointer;text-shadow:0 1px 1px rgba(0,0,0,0.4);" title="${tip.replace(/"/g,'&quot;')}">${ev.taskId}</div>`;
+    });
+
+    h+=`</div></td></tr>`;
+  });
+
+  h+=`</tbody></table></div>
+    <div style="margin-top:14px;font-size:11px;color:#888780;">
+      Cada barra es una tarea (color = proyecto). Hover para detalles. Línea roja vertical = hoy. Las tareas completadas se ven traslúcidas.
+    </div>
+  </div>`;
+
+  root.innerHTML=h;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1532,6 +1811,7 @@ function getFilterOptions(field,proj,sch){
 function filterButtonLabel(field,proj){
   const vals=getFilterValues(proj,field);
   if(!vals.length)return 'Todos ▾';
+  if(vals.length===1&&vals[0]==='__NONE__')return 'Ninguno ▾';
   if(vals.length===1){
     const v=vals[0];
     const label=field==='estado'
@@ -1542,14 +1822,38 @@ function filterButtonLabel(field,proj){
   return vals.length+' seleccionados ▾';
 }
 
+function renderFilterPopupBody(field,proj){
+  const popup=document.getElementById('filter-popup');
+  if(!popup)return;
+  const sch=sched(proj).sch;
+  const options=getFilterOptions(field,proj,sch);
+  const selected=getFilterValues(proj,field);
+  const allMode=selected.length===0;
+  let html='<label style="border-bottom:0.5px solid #eee;margin-bottom:2px;padding-bottom:4px;display:flex;align-items:center;gap:7px;font-weight:500;"><input type="checkbox" '+(allMode?'checked':'')+' data-action="all" data-field="'+field+'"> todos</label>';
+  if(!options.length){
+    html+='<div class="filter-empty">Sin opciones</div>';
+  }else{
+    options.forEach(opt=>{
+      const checked=(allMode||selected.includes(opt))?'checked':'';
+      const label=field==='estado'?({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'}[opt]||opt):opt;
+      html+='<label><input type="checkbox" '+checked+' data-action="toggle" data-field="'+field+'" data-value="'+String(opt).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"> '+label+'</label>';
+    });
+  }
+  popup.innerHTML=html;
+  popup.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change',function(){
+      const f=this.dataset.field;
+      if(this.dataset.action==='all')toggleAllFilter(f,this.checked);
+      else toggleFilterValue(f,this.dataset.value,this.checked);
+    });
+  });
+}
+
 function openFilterPopup(e,field){
   e.stopPropagation();
   const popup=document.getElementById('filter-popup');
   if(!popup)return;
   const proj=activeProject();
-  const sch=sched(proj).sch;
-  const options=getFilterOptions(field,proj,sch);
-  const selected=getFilterValues(proj,field);
 
   if(popup.dataset.field===field&&popup.style.display==='block'){
     popup.style.display='none';
@@ -1558,24 +1862,7 @@ function openFilterPopup(e,field){
   }
 
   popup.dataset.field=field;
-  let html='<label style="border-bottom:0.5px solid #eee;margin-bottom:2px;padding-bottom:4px;display:flex;align-items:center;gap:7px;"><input type="checkbox" '+(selected.length===0?'checked':'')+' data-action="clear" data-field="'+field+'"> todos</label>';
-  if(!options.length){
-    html+='<div class="filter-empty">Sin opciones</div>';
-  }else{
-    options.forEach(opt=>{
-      const checked=selected.includes(opt)?'checked':'';
-      const label=field==='estado'?({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'}[opt]||opt):opt;
-      html+='<label><input type="checkbox" '+checked+' data-action="toggle" data-field="'+field+'" data-value="'+String(opt).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"> '+label+'</label>';
-    });
-  }
-  popup.innerHTML=html;
-  popup.querySelectorAll('input[type=checkbox]').forEach(cb=>{
-    cb.addEventListener('change',function(){
-      const field=this.dataset.field;
-      if(this.dataset.action==='clear')clearFilterField(field);
-      else toggleFilterValue(field,this.dataset.value,this.checked);
-    });
-  });
+  renderFilterPopupBody(field,proj);
 
   const r=e.currentTarget.getBoundingClientRect();
   const below=window.innerHeight-r.bottom-8;
@@ -1596,13 +1883,47 @@ function openFilterPopup(e,field){
 
 function toggleFilterValue(field,value,checked){
   const proj=activeProject();
-  const vals=getFilterValues(proj,field).slice();
+  const sch=sched(proj).sch;
+  const allOptions=getFilterOptions(field,proj,sch);
+  let vals=getFilterValues(proj,field).slice();
+
+  // Si veníamos de modo "todos" (vacío o sentinela), arrancamos visualmente con todos seleccionados
+  const wasAllMode=vals.length===0;
+  const wasNoneMode=vals.length===1&&vals[0]==='__NONE__';
+  if(wasAllMode){
+    vals=allOptions.slice();
+  }else if(wasNoneMode){
+    vals=[];
+  }
+
   const idx=vals.indexOf(value);
   if(checked&&idx===-1)vals.push(value);
   if(!checked&&idx!==-1)vals.splice(idx,1);
+
+  // Normalizar: si quedaron todos seleccionados, volver a "todos" (vacío)
+  if(vals.length===allOptions.length)vals=[];
+  // Si quedaron ninguno (después de desmarcar el último), usar sentinela
+  else if(vals.length===0)vals=['__NONE__'];
+
   proj.filters[field]=vals;
   saveState();
   render();
+  syncOpenFilterPopup(field,proj);
+}
+
+function toggleAllFilter(field,checked){
+  const proj=activeProject();
+  // Click en "todos": checked => mostrar todo (vacío). unchecked => no mostrar nada (sentinela)
+  proj.filters[field]=checked?[]:['__NONE__'];
+  saveState();
+  render();
+  syncOpenFilterPopup(field,proj);
+}
+
+function syncOpenFilterPopup(field,proj){
+  const popup=document.getElementById('filter-popup');
+  if(!popup||popup.style.display!=='block'||popup.dataset.field!==field)return;
+  renderFilterPopupBody(field,proj);
 }
 
 function clearFilterField(field){
@@ -1625,6 +1946,7 @@ function clearFilters(){
 // ═══════════════════════════════════════════════════════════════
 function render(){
   if(viewingGlobalDevs){renderGlobalDevsView();return;}
+  if(viewingTeamLoad){renderTeamLoadView();return;}
   try{
   const proj=activeProject();
   const{sch,df}=sched(proj);
@@ -1766,6 +2088,38 @@ function render(){
       const devOv=proj.globalDevOverrides[dev.id]||{};
       const projAvail=devOv.avail!==undefined?devOv.avail:dev.avail??100;
       const projActive=devOv.active!==undefined?devOv.active:true;
+      const dru=calcDevRealUsage(dev.id,proj);
+      const colDel=dru.deltaDelivered>0?'#176B4D':dru.deltaDelivered<0?'#9C2A2A':'#5f5e5a';
+      const colDone=dru.delta>0?'#176B4D':dru.delta<0?'#9C2A2A':'#5f5e5a';
+      const lblDel=dru.deltaDelivered>0?`ahorro ${dru.savingsDelivered}h`:dru.deltaDelivered<0?`sobreuso ${dru.overrunDelivered}h`:'sin desvío';
+      const lblDone=dru.delta>0?`ahorro ${dru.savings}h`:dru.delta<0?`sobreuso ${dru.overrun}h`:'sin desvío';
+
+      let realBadge='';
+      if(dru.deliveredCount>0){
+        // Vista interna (rendimiento del equipo): entregadas
+        realBadge=`<span style="font-size:11px;color:#0c447c;display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:6px;background:#e6f1fb;" title="Rendimiento interno: tareas entregadas por el dev (probando, garantía, cerradas)">
+          <span style="font-weight:600;">${dru.deliveredCount} entr.</span>
+          <span style="color:#7a96b8">·</span>
+          <span>${dru.committedDelivered}h comp.</span>
+          <span style="color:#7a96b8">·</span>
+          <span>${dru.hoursRealDelivered}h reales</span>
+          <span style="color:#7a96b8">·</span>
+          <span style="color:${colDel};font-weight:600;" title="${lblDel}">${lblDel} (${dru.deltaPctDelivered>=0?'+':''}${dru.deltaPctDelivered}%)</span>
+        </span>`;
+        // Cerradas como detalle secundario si las hay
+        if(dru.doneCount>0){
+          realBadge+=`<span style="font-size:11px;color:#5f5e5a;display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border-radius:6px;background:#f1efe8;" title="Cliente confirmó (cerradas)">
+            <span style="color:#888780">cerr:</span>
+            <span>${dru.doneCount}</span>
+            <span style="color:#b4b2a9">·</span>
+            <span>${dru.hoursReal}h</span>
+            <span style="color:#b4b2a9">·</span>
+            <span style="color:${colDone};font-weight:500;" title="${lblDone}">${dru.deltaPct>=0?'+':''}${dru.deltaPct}%</span>
+          </span>`;
+        }
+      }else{
+        realBadge=`<span style="font-size:11px;color:#b4b2a9;">sin entregas</span>`;
+      }
       h+=`<div class="dev-row" style="opacity:${projActive?1:0.45}">
         <span class="dev-color-dot" style="background:${col.bar}"></span>
         <span style="font-size:12px;min-width:140px;font-weight:500;">${dev.name}</span>
@@ -1778,6 +2132,7 @@ function render(){
           <span class="avail-num" style="color:${projAvail<50?'#ba7517':'#1a1a18'}">${projAvail}%</span>
         </div>
         <span style="font-size:11px;color:#888780;">${pload[dev.id]||0}h en proyecto${isOverloaded?' ⚠ cruzado':''}</span>
+        ${realBadge}
         ${isOverloaded?'<span class="overload-badge">Sobrecarga cruzada</span>':''}
       </div>`;
     });
@@ -1798,6 +2153,7 @@ function render(){
     <div class="sc"><div class="sc-label">Horas restantes</div><div class="sc-val">${remainingCommittedH}</div><div class="sc-sub">comprometidas - completadas</div></div>
     <div class="sc"><div class="sc-label">Horas consumidas reales</div><div class="sc-val">${realUsage.hoursReal}</div><div class="sc-sub">${realUsage.doneCount} cerradas</div></div>
     <div class="sc" style="min-width:170px"><div class="sc-label">Horas remanentes</div><div class="sc-val">${realUsage.remainingReal}</div><div style="margin-top:4px;font-size:9px;color:#888780;line-height:1.2"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center;font-weight:500;"><span>H.Dev</span><span>H.Test</span><span>Gar</span></div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center;color:#5f5e5a;margin-top:2px;"><span>${realUsage.remDev}</span><span>${realUsage.remTest}</span><span>${realUsage.remGar}</span></div></div><div class="sc-sub">solo cerradas</div></div>
+    <div class="sc" style="${realUsage.retrabajoTotal>0?'background:#fdecec':''}"><div class="sc-label">Costo retrabajo</div><div class="sc-val" style="${realUsage.retrabajoTotal>0?'color:#9C2A2A':''}">${realUsage.retrabajoTotal}<span style="font-size:11px;color:#888780">h</span></div><div class="sc-sub">${realUsage.ciclosTotal} ciclos · ${realUsage.tasksWithRework} tarea${realUsage.tasksWithRework===1?'':'s'}</div></div>
     <div class="sc"><div class="sc-label">WI vinculados</div><div class="sc-val">${proj.tasks.filter(t=>t.wiId).length}<span style="font-size:12px;color:#888780">/${proj.tasks.length}</span></div></div>
   </div>
 
@@ -1938,13 +2294,54 @@ function render(){
       <td style="text-align:center"><input class="ce" style="width:48px;text-align:center" type="number" min="0" value="${t.hDev||0}" onchange="sfH('${t.id}','hDev',this.value)" ${vDis?'disabled':''}></td>
       <td style="text-align:center"><input class="ce" style="width:48px;text-align:center" type="number" min="0" value="${t.hTest||0}" onchange="sfH('${t.id}','hTest',this.value)" ${vDis?'disabled':''}></td>
       <td style="text-align:center"><input class="ce" style="width:48px;text-align:center" type="number" min="0" value="${t.garantia||0}" onchange="sfH('${t.id}','garantia',this.value)" ${vDis?'disabled':''}></td>
-      <td style="text-align:center;background:#eef2fb;color:#0c447c;font-weight:600">${taskBaseHours(t)}</td>
+      <td style="text-align:center;background:#eef2fb;color:#0c447c;font-weight:600">${taskBaseHours(t)}${(()=>{
+        // Mostrar real/ahorro si hay datos: completada (con eoReal) o entregada (con eoDev)
+        const hasData=t.estado==='completado'||!!t.eoDev;
+        if(!hasData)return '';
+        const u=calcTaskRealUsage(t,proj);
+        if(u.hoursReal===0&&u.committed===0)return '';
+        const sav=u.committed-u.hoursReal;
+        const savColor=sav>0?'#176B4D':sav<0?'#9C2A2A':'#888780';
+        const arrow=sav>0?'▼':sav<0?'▲':'=';
+        const entregaDev=u.eoDev?fmt(parseDate(u.eoDev)):'—';
+        const tip=`Real ${u.hoursReal}h · ${sav>=0?'Ahorro':'Sobreuso'} ${Math.abs(sav)}h · Fin Dev ${entregaDev} · Avail ${u.availPct}%`;
+        return `<div style="font-size:9px;font-weight:500;color:${savColor};margin-top:1px;" title="${tip}">${u.hoursReal}h ${arrow}${Math.abs(sav)}</div>`;
+      })()}</td>
       <td style="text-align:center;color:${availAffected?'#ba7517':'#888780'}" ${daysTip}>${t.days}${availAffected?'<span style="font-size:9px;margin-left:1px;">⚡</span>':''}</td>
       <td style="text-align:center"><input class="ce" type="number" min="0" style="width:56px;text-align:center" value="${delayDays}" onchange="sf('${t.id}','delayDays',this.value)" ${sDis?'disabled':''}></td>
       <td style="text-align:center"><input class="ce" type="number" min="0" style="width:56px;text-align:center" value="${testDays}" onchange="sf('${t.id}','testDays',this.value)" ${sDis?'disabled':''}></td>
       <td><select class="cs dev-select" data-taskid="${t.id}" ${devDis?'disabled':''}>${dOpts}</select></td>
       <td><input type="date" class="ce ${hOs?'ov':''}" style="width:108px" value="${t.so||iso(t.start)}" onchange="sf('${t.id}','so',this.value||null)" ${sDis?'disabled':''}></td>
-      <td><input type="date" class="ce ${hOe?'ov':''}" style="width:108px" value="${eoDisplay}" onchange="sf('${t.id}','eo',this.value||null)" ${eDis?'disabled':''}></td>
+      <td>${(()=>{
+        const rwk=Number(t.horasRetrabajo)||0;
+        const events=Array.isArray(t.cycleEvents)?t.cycleEvents:[];
+        const ciclos=events.filter(c=>c.tipo==='reentrega').length;
+        const histLines=events.map(c=>{
+          if(c.tipo==='devolución')return `↩ Devolución ${c.fecha}`;
+          if(c.tipo==='reentrega')return `↪ Re-entrega ${c.fecha} (${c.horas||0}h)`;
+          return '';
+        }).filter(Boolean).join('\n');
+        const tip=histLines||'Sin ciclos de retrabajo';
+        const rwkBadge=rwk>0?`<div style="font-size:9px;color:#9C2A2A;text-align:center;margin-top:2px;cursor:help;" title="${tip}">↻ ${rwk}h${ciclos>0?` · ${ciclos} ciclo${ciclos===1?'':'s'}`:''}</div>`:'';
+        // Dual input only for completed tasks (real close already happened)
+        if(t.estado==='completado'){
+          const devVal=t.eoDev||'';
+          const realVal=t.eoReal||eoDisplay||'';
+          return `<div style="display:flex;flex-direction:column;gap:2px;">
+            <input type="date" class="ce" style="width:108px;font-size:11px" value="${devVal}" onchange="sf('${t.id}','eoDev',this.value||null)" title="Fin Dev (entrega del desarrollador)">
+            <input type="date" class="ce ${hOe?'ov':''}" style="width:108px;font-size:11px" value="${realVal}" onchange="sf('${t.id}','eo',this.value||null)" title="Fin Real (cierre cliente)">
+          </div>${rwkBadge}`;
+        }
+        // Para Probando / Garantía: input editable de Fin Dev (arriba) + Plan (abajo)
+        if(t.estado==='pruebas_cliente'||t.estado==='en_garantia'){
+          const devVal=t.eoDev||'';
+          return `<div style="display:flex;flex-direction:column;gap:2px;">
+            <input type="date" class="ce" style="width:108px;font-size:11px${devVal?'':';border-color:#ba7517;background:#fdf6e9'}" value="${devVal}" onchange="sf('${t.id}','eoDev',this.value||null)" title="Fin Dev (entrega del desarrollador)" placeholder="Fin Dev">
+            <input type="date" class="ce ${hOe?'ov':''}" style="width:108px;font-size:11px" value="${eoDisplay}" onchange="sf('${t.id}','eo',this.value||null)" ${eDis?'disabled':''} title="Plan / Fin estimado">
+          </div>${rwkBadge}`;
+        }
+        return `<input type="date" class="ce ${hOe?'ov':''}" style="width:108px" value="${eoDisplay}" onchange="sf('${t.id}','eo',this.value||null)" ${eDis?'disabled':''}>${rwkBadge}`;
+      })()}</td>
       ${dd}
       <td><input class="ce" style="width:72px;text-align:center" maxlength="9" inputmode="numeric" placeholder="S/N" value="${t.wiCliente||''}" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,9)" onchange="sf('${t.id}','wiCliente',this.value)"></td>
       <td>${wiCell}</td>
@@ -1976,12 +2373,13 @@ function render(){
             const _devColor=_bc;
             const _testColor=darkenColor(_bc,0.12);
             const _garColor=darkenColor(_bc,0.24);
-            const _trackHtml='<div class="gantt-bar-track" title="'+t.id+' · Dev: '+(t.hDev||0)+'h · Test: '+(t.hTest||0)+'h · Gar: '+(t.garantia||0)+'h'+(_delayDays>0?' · Retraso: '+_delayDays+' día(s)':'')+(_testDays>0?' · Pruebas: '+_testDays+' día(s)':'')+'">'
-              +(_delayPct>0?'<div class="gantt-seg gantt-delay-seg" style="left:0;width:'+_delayPct+'%;background:'+_delayColor+'"></div>':'')
-              +(_testDaysPct>0?'<div class="gantt-seg gantt-delay-seg" style="left:'+_delayPct+'%;width:'+_testDaysPct+'%;background:'+_testDaysColor+'"></div>':'')
-              +'<div class="gantt-seg gantt-dev-seg" style="left:'+(_delayPct+_testDaysPct)+'%;width:'+_devPct+'%;background:'+_devColor+'"></div>'
-              +'<div class="gantt-seg gantt-test-seg" style="left:'+(_delayPct+_testDaysPct+_devPct)+'%;width:'+_testPct+'%;background:'+_testColor+'"></div>'
-              +'<div class="gantt-seg gantt-gar-seg" style="left:'+(_delayPct+_testDaysPct+_devPct+_testPct)+'%;width:'+_garPct+'%;background:'+_garColor+'"></div>'
+            // Orden visual: equipo (Dev → Test → Gar) → cliente (Retención → Pruebas)
+            const _trackHtml='<div class="gantt-bar-track" title="'+t.id+' · Dev: '+(t.hDev||0)+'h · Test: '+(t.hTest||0)+'h · Gar: '+(t.garantia||0)+'h'+(_delayDays>0?' · Retención cliente: '+_delayDays+' día(s)':'')+(_testDays>0?' · Pruebas cliente: '+_testDays+' día(s)':'')+'">'
+              +'<div class="gantt-seg gantt-dev-seg" style="left:0;width:'+_devPct+'%;background:'+_devColor+'"></div>'
+              +'<div class="gantt-seg gantt-test-seg" style="left:'+_devPct+'%;width:'+_testPct+'%;background:'+_testColor+'"></div>'
+              +'<div class="gantt-seg gantt-gar-seg" style="left:'+(_devPct+_testPct)+'%;width:'+_garPct+'%;background:'+_garColor+'"></div>'
+              +(_delayPct>0?'<div class="gantt-seg gantt-delay-seg" style="left:'+(_devPct+_testPct+_garPct)+'%;width:'+_delayPct+'%;background:'+_delayColor+'"></div>':'')
+              +(_testDaysPct>0?'<div class="gantt-seg gantt-delay-seg" style="left:'+(_devPct+_testPct+_garPct+_delayPct)+'%;width:'+_testDaysPct+'%;background:'+_testDaysColor+'"></div>':'')
               +'</div>';
             return '<div class="gantt-range gantt-bar" data-start="'+_startForBar+'" data-end="'+_endForBar+'" style="left:0px;width:0px;opacity:'+_op+';--dev-color:'+_bc+';">'
               +_trackHtml
@@ -2046,12 +2444,13 @@ function setE(taskId,v){
   const scheduledBefore=sched(proj).sch.find(x=>x.id===taskId);
 
   if(v==='completado'){
-    const manualCurrentEnd=t.eo||null;
-    const plannedEnd=t.eoPlan||manualCurrentEnd||scheduledBefore?.eo||scheduledBefore?.eoPlan||(scheduledBefore?.end?iso(scheduledBefore.end):null)||null;
+    const plannedEnd=t.eoPlan||t.eo||scheduledBefore?.eo||scheduledBefore?.eoPlan||(scheduledBefore?.end?iso(scheduledBefore.end):null)||null;
 
     if(plannedEnd)t.eoPlan=plannedEnd;
 
-    t.eoReal = manualCurrentEnd || t.eoReal || t.eoPlan || iso(TODAY);
+    // Real end defaults to TODAY (when user marks complete), not the planned date.
+    // User can override afterwards by editing the Fin field — that writes to t.eoReal in sf().
+    t.eoReal = t.eoReal || iso(TODAY);
     t.eo = t.eoReal;
     t.estado='completado';
   }else{
@@ -2137,11 +2536,77 @@ function setE(taskId,v){
     }
   }
 
+  // ─── Tracking de Fin Dev y retrabajo ─────────────────────────────
+  // 1ª vez que entra a Probando o Completado → guarda fecha de entrega del dev
+  if((v==='pruebas_cliente'||v==='completado') && !t.eoDev){
+    t.eoDev = iso(TODAY);
+  }
+  // Sale de Probando hacia Desarrollo → arranca contador de retrabajo + registra devolución
+  if(v==='en_desarrollo' && prev==='pruebas_cliente'){
+    t._reworkStart = iso(TODAY);
+    if(!Array.isArray(t.cycleEvents))t.cycleEvents=[];
+    t.cycleEvents.push({tipo:'devolución',fecha:iso(TODAY)});
+    showToast('Tarea regresada a desarrollo. Se contarán horas de retrabajo al volver a Probando.','success');
+  }
+  // Regresa a Probando o pasa a Completado teniendo retrabajo pendiente → pide horas
+  let pendingReworkPrompt=false;
+  if((v==='pruebas_cliente'||v==='completado') && t._reworkStart){
+    pendingReworkPrompt=true;
+  }
+
   saveState();
   if(proj.devops.autoSync&&t.wiId&&v!==prev)syncWIState(taskId,v);
 
   render();
   requestAnimationFrame(()=>applyRealBarPositions());
+  if(pendingReworkPrompt) promptReworkHours(taskId);
+}
+
+function promptReworkHours(taskId){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);
+  if(!t||!t._reworkStart)return;
+  const start=parseDate(t._reworkStart);
+  const dev=dByI(t.pdi,proj);
+  const ov=(proj.globalDevOverrides||{})[t.pdi]||{};
+  const availPct=Math.max(0,Math.min(100,ov.avail??dev?.avail??100));
+  const hpd=proj.hpd||8;
+  const days=wdInclusive(start,TODAY);
+  const suggested=Math.max(0,Math.round(days*hpd*(availPct/100)));
+  const acum=Number(t.horasRetrabajo)||0;
+
+  const body=`
+    <p style="font-size:13px;margin-bottom:10px;">El desarrollador volvió a la tarea entre <b>${fmt(start)}</b> y <b>${fmt(TODAY)}</b> (<b>${days}</b> días hábiles).</p>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+      Horas de retrabajo:
+      <input type="number" id="rework-hours" value="${suggested}" min="0" step="1" style="width:80px;padding:5px 8px;font-size:14px;border:1px solid #b4b2a9;border-radius:4px;text-align:right;">
+    </label>
+    <p style="font-size:11px;color:#888780;margin-top:8px;">Sugerencia: ${suggested}h (${days}d × ${hpd}hpd × ${availPct}%). Ajusta si el dev no estuvo 100% en este bug.</p>
+    <p style="font-size:11px;color:#888780;margin-top:4px;">Acumulado previo: ${acum}h → nuevo total: <span id="rework-total" style="font-weight:600;">${acum+suggested}h</span></p>
+  `;
+  showModal('Horas de retrabajo (bug-fix)',body,()=>{
+    const inp=document.getElementById('rework-hours');
+    const hours=Math.max(0,parseFloat(inp?.value)||0);
+    t.horasRetrabajo=(Number(t.horasRetrabajo)||0)+hours;
+    if(!Array.isArray(t.cycleEvents))t.cycleEvents=[];
+    t.cycleEvents.push({tipo:'reentrega',fecha:iso(TODAY),horas:hours});
+    t._reworkStart=null;
+    saveState();
+    render();
+    const ciclos=t.cycleEvents.filter(c=>c.tipo==='reentrega').length;
+    showToast(`+${hours}h de retrabajo (ciclo #${ciclos}, total: ${t.horasRetrabajo}h)`,'success');
+  });
+  // Live update del total mostrado
+  setTimeout(()=>{
+    const inp=document.getElementById('rework-hours');
+    const tot=document.getElementById('rework-total');
+    if(inp&&tot){
+      inp.addEventListener('input',()=>{
+        const h=Math.max(0,parseFloat(inp.value)||0);
+        tot.textContent=(acum+h)+'h';
+      });
+    }
+  },50);
 }
 
 function calcEo(so,total,dev,hpd,delayDays=0,testDays=0){
@@ -2219,6 +2684,15 @@ function sf(taskId,field,value){
       if(conflict&&dev){
         showToast('⚠ '+dev.name+' ocupado hasta '+conflict.eo+' en '+conflict.id+' — fecha ajustada automáticamente','error');
       }
+      // Cross-proyecto: chequeo en otros proyectos
+      if(dev&&!conflict){
+        const xConflicts=getDevConflicts(t.pdi,parseDate(value),parseDate(value),proj.id+':'+taskId)
+          .filter(c=>c.projectId!==proj.id);
+        if(xConflicts.length){
+          const c=xConflicts[0];
+          showToast(`⚠ ${dev.name} ocupado en ${c.projectName} (${c.taskId}, hasta ${c.endStr}). Su próximo libre real: ${iso(getDevNextFree(t.pdi,parseDate(value)))}`,'error');
+        }
+      }
     }
     cascadeDevTasks(proj,t.pdi,taskId);
   }
@@ -2236,6 +2710,22 @@ function sf(taskId,field,value){
       showToast('⚠ La fecha fin real no puede ser menor que la fecha inicio','error');
       t.eoReal=t.so;
     }
+  }
+
+  if(field==='eoDev'){
+    t.eoDev=value||null;
+    if(value&&t.so&&parseDate(value)<parseDate(t.so)){
+      showToast('⚠ Fin Dev no puede ser menor que el inicio','error');
+      t.eoDev=t.so;
+    }
+    if(value&&t.eoReal&&parseDate(value)>parseDate(t.eoReal)){
+      showToast('⚠ Fin Dev no puede ser posterior al Fin Real (cierre cliente)','error');
+      t.eoDev=t.eoReal;
+    }
+  }
+
+  if(field==='horasRetrabajo'){
+    t.horasRetrabajo=Math.max(0,Number(value)||0);
   }
 
   if(field==='total'){
@@ -2717,17 +3207,19 @@ async function exportPDF(){
   try{
     const proj=activeProject();
     const{sch,df}=sched(proj);
-    const pdfTasks=displaySortedTasks(sch);
+    const pdfTasks=displaySortedTasks(sch).filter(t=>taskMatchesFilters(t,proj));
     const allD=pdfTasks.flatMap(t=>[t.start,t.end]);
-    if(!allD.length){overlay.classList.remove('active');btn.disabled=false;alert('No hay tareas para exportar.');return;}
+    if(!allD.length){overlay.classList.remove('active');btn.disabled=false;alert('No hay tareas para exportar (revisa los filtros activos).');return;}
+    const visibleIds=new Set(pdfTasks.map(t=>t.id));
+    const visibleTasks=proj.tasks.filter(t=>visibleIds.has(t.id));
     const pad_placeholder=null;
   const minD=norm(new Date(Math.min(...allD.map(d=>d.getTime())))),maxD=norm(new Date(Math.max(...allD.map(d=>d.getTime()))));
-    const backlogH=proj.tasks.filter(t=>t.estado==='nuevo').reduce((s,t)=>s+taskCountableHours(t),0);
-    const committedH=proj.tasks.filter(t=>t.estado!=='nuevo').reduce((s,t)=>s+taskCountableHours(t),0);
-    const completedCommittedH=proj.tasks.filter(t=>t.estado==='completado').reduce((s,t)=>s+taskCountableHours(t),0);
+    const backlogH=visibleTasks.filter(t=>t.estado==='nuevo').reduce((s,t)=>s+taskCountableHours(t),0);
+    const committedH=visibleTasks.filter(t=>t.estado!=='nuevo').reduce((s,t)=>s+taskCountableHours(t),0);
+    const completedCommittedH=visibleTasks.filter(t=>t.estado==='completado').reduce((s,t)=>s+taskCountableHours(t),0);
     const remainingCommittedH=Math.max(0,committedH-completedCommittedH);
     const tH=committedH;
-    const aS=sch.filter(t=>t.estado!=='completado'&&t.estado!=='pausa_cliente'&&t.estado!=='pruebas_cliente');
+    const aS=pdfTasks.filter(t=>t.estado!=='completado'&&t.estado!=='pausa_cliente'&&t.estado!=='pruebas_cliente');
     const activeCommittedH=remainingCommittedH;
     const realUsage=calcProjectRealUsage(proj);
       const pad=norm(new Date(maxD));pad.setDate(pad.getDate()+3);
@@ -2851,6 +3343,329 @@ async function exportPDF(){
   finally{overlay.classList.remove('active');btn.disabled=false;}
 }
 
+function exportExcel(){
+  if(viewingGlobalDevs)return;
+  if(typeof XLSX==='undefined'){alert('Librería Excel cargando, intenta de nuevo en unos segundos.');return;}
+  const btn=document.getElementById('btn-xlsx');
+  if(btn){btn.disabled=true;}
+  try{
+    const proj=activeProject();
+    const{sch}=sched(proj);
+    const visible=displaySortedTasks(sch).filter(t=>taskMatchesFilters(t,proj));
+    if(!visible.length){alert('No hay tareas para exportar (revisa los filtros activos).');return;}
+
+    const estLabel={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'};
+    const hpd=proj.hpd||8;
+
+    const rows=visible.map(t=>({
+      'Estado':estLabel[t.estado]||t.estado||'',
+      'ID':t.id||'',
+      'Nombre':t.name||'',
+      'Prioridad':t.pri||'',
+      'H.Dev':Number(t.hDev)||0,
+      'H.Test':Number(t.hTest)||0,
+      'Garantía':Number(t.garantia)||0,
+      'Horas Totales':taskCountableHours(t),
+      'Días':t.days||taskScheduleDays(t,proj),
+      'D.Retraso':Math.max(0,parseInt(t.delayDays)||0),
+      'D.Pruebas Cli.':Math.max(0,parseInt(t.testDays)||0),
+      'Dev':t.adev?.name||'',
+      'WI Cliente':t.wiCliente||'',
+      'WI DevOps':t.wiId||'',
+      'Inicio':t.so||(t.start?iso(t.start):''),
+      'Fin':t.eo||t.eoPlan||(t.end?iso(t.end):''),
+      'Dependencias':(t.deps||[]).join(', ')
+    }));
+
+    const totalH=rows.reduce((s,r)=>s+(r['Horas Totales']||0),0);
+    rows.push({});
+    rows.push({'Estado':'TOTAL','Horas Totales':totalH});
+
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[
+      {wch:14},{wch:14},{wch:34},{wch:5},
+      {wch:7},{wch:7},{wch:9},{wch:9},{wch:6},
+      {wch:9},{wch:14},{wch:18},{wch:11},{wch:11},
+      {wch:12},{wch:12},{wch:20}
+    ];
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Plan');
+
+    const devs=allDevs(proj);
+    const devRows=devs
+      .filter(d=>visible.some(t=>t.adev?.id===d.id))
+      .map(d=>{
+        const tasks=visible.filter(t=>t.adev?.id===d.id);
+        const dru=calcDevRealUsage(d.id,proj);
+        return {
+          'Desarrollador':d.name||'',
+          'Horas asignadas':tasks.reduce((s,t)=>s+taskCountableHours(t),0),
+          'Tareas':tasks.length,
+          // Entregadas (rendimiento del equipo: dev terminó)
+          'Entregadas':dru.deliveredCount,
+          'Comp. entregadas (h)':dru.committedDelivered,
+          'Original (h)':dru.hoursOriginalDelivered,
+          'Retrabajo (h)':dru.hoursRetrabajoDelivered,
+          'Ciclos':dru.ciclosTotal,
+          'Reales entregadas (h)':dru.hoursRealDelivered,
+          'Δ entregadas (h)':dru.deltaDelivered,
+          'Δ entregadas %':dru.deltaPctDelivered,
+          // Cerradas (cliente confirmó)
+          'Cerradas':dru.doneCount,
+          'Comp. cerradas (h)':dru.committedDone,
+          'Reales cerradas (h)':dru.hoursReal,
+          'Δ cerradas (h)':dru.delta,
+          'Δ cerradas %':dru.deltaPct,
+          'Disponibilidad %':(d.avail??100)
+        };
+      });
+    if(devRows.length){
+      const ws2=XLSX.utils.json_to_sheet(devRows);
+      ws2['!cols']=[
+        {wch:22},{wch:16},{wch:7},
+        {wch:11},{wch:20},{wch:11},{wch:13},{wch:7},{wch:20},{wch:14},{wch:14},
+        {wch:9},{wch:18},{wch:18},{wch:14},{wch:14},
+        {wch:18}
+      ];
+      XLSX.utils.book_append_sheet(wb,ws2,'Desarrolladores');
+    }
+
+    // Hoja "Horas reales" — desglose por tarea cerrada
+    const realRows=visible
+      .filter(t=>t.estado==='completado')
+      .map(t=>{
+        const u=calcTaskRealUsage(t,proj);
+        const savings=u.committed-u.hoursReal;
+        const entregaReal=t.eoReal||(u.endDate?iso(u.endDate):'');
+        const entregaPlan=t.eoPlan||'';
+        let desvioDias='';
+        if(entregaReal&&entregaPlan){
+          const p=parseDate(entregaPlan), r=parseDate(entregaReal);
+          const sign=r<p?-1:1;
+          const a=sign<0?r:p, b=sign<0?p:r;
+          desvioDias=sign*(wdInclusive(a,b)-1);
+        }
+        return {
+          'ID':t.id,
+          'Nombre':t.name||'',
+          'Dev':t.adev?.name||(dByI(t.pdi,proj)?.name)||'',
+          'Avail %':u.availPct,
+          'H.Dev':t.hDev||0,
+          'H.Test':t.hTest||0,
+          'Garantía':t.garantia||0,
+          'Comprometido':u.committed,
+          'D.Cliente (h)':u.delayHours,
+          'P.Cliente (h)':u.testDaysHours,
+          'Calendario (h)':u.hoursCalendar,
+          'Disponibles (h)':u.hoursAvailable,
+          'Reales (h)':u.hoursReal,
+          'Ahorro (h)':savings,
+          'Ahorro %':u.committed>0?Math.round((savings/u.committed)*100):0,
+          'Inicio':t.so||'',
+          'Entrega plan':entregaPlan,
+          'Entrega real':entregaReal,
+          'Desvío (días háb.)':desvioDias
+        };
+      });
+    if(realRows.length){
+      const ws3=XLSX.utils.json_to_sheet(realRows);
+      ws3['!cols']=[{wch:14},{wch:30},{wch:18},{wch:7},{wch:7},{wch:7},{wch:9},{wch:13},{wch:13},{wch:13},{wch:14},{wch:15},{wch:11},{wch:11},{wch:9},{wch:11},{wch:13},{wch:13},{wch:17}];
+      XLSX.utils.book_append_sheet(wb,ws3,'Horas reales');
+    }
+
+    const d=new Date();
+    const fname=`${proj.name}-Plan-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.xlsx`;
+    XLSX.writeFile(wb,fname);
+  }catch(err){console.error(err);alert('Error al generar Excel: '+err.message);}
+  finally{if(btn)btn.disabled=false;}
+}
+
+function exportAudit(){
+  if(typeof XLSX==='undefined'){alert('Librería Excel cargando, intenta de nuevo en unos segundos.');return;}
+  const btn=document.getElementById('btn-audit');
+  if(btn)btn.disabled=true;
+  try{
+    const estLabel={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'};
+    const wb=XLSX.utils.book_new();
+
+    // ── Hoja Resumen
+    const sumRows=G.projects.map(p=>{
+      const ru=calcProjectRealUsage(p);
+      const committedAll=p.tasks.reduce((s,t)=>s+taskBaseHours(t),0);
+      const committedDone=p.tasks.filter(t=>t.estado==='completado').reduce((s,t)=>s+taskBaseHours(t),0);
+      const delta=committedDone-ru.hoursReal;
+      return {
+        'Proyecto':p.name,
+        'hpd':p.hpd||8,
+        'Tareas':p.tasks.length,
+        'Cerradas':ru.doneCount,
+        'Comp. total (h)':committedAll,
+        'Comp. cerradas (h)':committedDone,
+        'Reales (h)':ru.hoursReal,
+        'Δ (comp-real)':delta,
+        '% ahorro':committedDone>0?Math.round((delta/committedDone)*100):0
+      };
+    });
+    const wsSum=XLSX.utils.json_to_sheet(sumRows);
+    wsSum['!cols']=[{wch:26},{wch:5},{wch:7},{wch:9},{wch:14},{wch:18},{wch:11},{wch:14},{wch:10}];
+    XLSX.utils.book_append_sheet(wb,wsSum,'Resumen');
+
+    // ── Hoja por proyecto con cálculo paso a paso
+    G.projects.forEach(p=>{
+      const hpd=p.hpd||8;
+      const rows=(p.tasks||[]).map(t=>{
+        const dev=dByI(t.pdi,p);
+        const ov=(p.globalDevOverrides||{})[t.pdi]||{};
+        const avail=Math.max(0,Math.min(100,ov.avail??dev?.avail??100));
+        const hDev=t.hDev||0, hTest=t.hTest||0, hGar=t.garantia||0;
+        const committed=hDev+hTest+hGar;
+        const delayDays=Math.max(0,parseInt(t.delayDays)||0);
+        const testDays=Math.max(0,parseInt(t.testDays)||0);
+        const delayHours=delayDays*hpd;
+        const testHours=testDays*hpd;
+
+        const isDone=t.estado==='completado';
+        const so=t.so||null;
+        const eoReal=t.eoReal||null;
+        const eoPlan=t.eoPlan||null;
+        const eoDev=t.eoDev||null;
+        const rework=Math.max(0,Number(t.horasRetrabajo)||0);
+
+        let mode='', calDays='', hoursCal='', hoursAvail='', ratio='', devU='', testU='', garU='', real='', delta='';
+
+        if(isDone){
+          if(eoDev){
+            mode='preciso (eoDev)';
+            const start=parseDate(so), end=parseDate(eoDev);
+            calDays=(start&&end)?wdInclusive(start,end):'';
+            hoursCal=typeof calDays==='number'?Math.round(calDays*hpd*(avail/100)):'';
+            real=typeof hoursCal==='number'?hoursCal+rework:'';
+            hoursAvail=real;
+            ratio=committed>0&&typeof real==='number'?Number((real/committed).toFixed(3)):'';
+            const devW=committed>0?hDev/committed:0;
+            const testW=committed>0?hTest/committed:0;
+            devU=typeof real==='number'?Math.round(real*devW):'';
+            testU=typeof real==='number'?Math.round(real*testW):'';
+            garU=typeof real==='number'?Math.max(0,real-devU-testU):'';
+            delta=typeof real==='number'?committed-real:'';
+          }else{
+            mode='aproximado';
+            const start=parseDate(so), end=parseDate(eoReal);
+            calDays=(start&&end)?wdInclusive(start,end):'';
+            hoursCal=typeof calDays==='number'?Math.round(calDays*hpd*(avail/100)):'';
+            hoursAvail=typeof hoursCal==='number'?Math.max(0,hoursCal-delayHours-testHours):'';
+            ratio=(typeof hoursAvail==='number'&&committed>0)?Math.min(1,hoursAvail/committed):'';
+            real=(typeof ratio==='number')?Math.round(committed*ratio)+rework:'';
+            const devW=committed>0?hDev/committed:0;
+            const testW=committed>0?hTest/committed:0;
+            devU=typeof real==='number'?Math.round(real*devW):'';
+            testU=typeof real==='number'?Math.round(real*testW):'';
+            garU=typeof real==='number'?Math.max(0,real-devU-testU):'';
+            delta=typeof real==='number'?committed-real:'';
+          }
+        }
+
+        let desvioCierre='';
+        if(eoReal&&eoPlan){
+          const pd=parseDate(eoPlan), rd=parseDate(eoReal);
+          const sign=rd<pd?-1:1;
+          const a=sign<0?rd:pd, b=sign<0?pd:rd;
+          desvioCierre=sign*(wdInclusive(a,b)-1);
+        }
+        let desvioDev='';
+        if(eoDev&&eoPlan){
+          const pd=parseDate(eoPlan), rd=parseDate(eoDev);
+          const sign=rd<pd?-1:1;
+          const a=sign<0?rd:pd, b=sign<0?pd:rd;
+          desvioDev=sign*(wdInclusive(a,b)-1);
+        }
+
+        return {
+          'ID':t.id,
+          'Nombre':t.name||'',
+          'Estado':estLabel[t.estado]||t.estado||'',
+          'Dev':dev?.name||'',
+          'Avail %':avail,
+          'hpd':hpd,
+          'H.Dev':hDev,
+          'H.Test':hTest,
+          'Garantía':hGar,
+          'Comprometido':committed,
+          'delayDays':delayDays,
+          'testDays':testDays,
+          'delayHours':delayHours,
+          'testHours':testHours,
+          'Inicio (so)':so||'',
+          'Plan (eoPlan)':eoPlan||'',
+          'Fin Dev (eoDev)':eoDev||'',
+          'Fin Real (eoReal)':eoReal||'',
+          'Modo cálculo':mode,
+          'Días háb. cal.':calDays,
+          'Cal × hpd × avail':hoursCal,
+          'Disponibles (h)':hoursAvail,
+          'Retrabajo (h)':rework,
+          'Ciclos':Array.isArray(t.cycleEvents)?t.cycleEvents.filter(c=>c.tipo==='reentrega').length:0,
+          'ratio':typeof ratio==='number'?Number(ratio.toFixed(3)):ratio,
+          'devUsed':devU,
+          'testUsed':testU,
+          'garUsed':garU,
+          'Reales (h)':real,
+          'Δ (comp-real)':delta,
+          'Desvío Dev (días)':desvioDev,
+          'Desvío Cierre (días)':desvioCierre
+        };
+      });
+
+      const ws=XLSX.utils.json_to_sheet(rows);
+      ws['!cols']=[
+        {wch:14},{wch:30},{wch:14},{wch:16},{wch:7},{wch:5},
+        {wch:6},{wch:6},{wch:8},{wch:12},
+        {wch:9},{wch:9},{wch:10},{wch:10},
+        {wch:12},{wch:12},{wch:12},{wch:12},
+        {wch:14},
+        {wch:13},{wch:18},{wch:14},{wch:11},{wch:7},{wch:6},
+        {wch:8},{wch:8},{wch:8},{wch:10},{wch:14},{wch:14},{wch:17}
+      ];
+      // Truncate sheet name to 31 chars (Excel limit) and remove invalid chars
+      const sheetName=String(p.name||'Proyecto').replace(/[\\\/\?\*\[\]:]/g,'').slice(0,31);
+      XLSX.utils.book_append_sheet(wb,ws,sheetName||'Proyecto');
+    });
+
+    // ── Hoja Historial ciclos (todos los eventos de devolución/reentrega del workspace)
+    const cycleRows=[];
+    G.projects.forEach(p=>{
+      (p.tasks||[]).forEach(t=>{
+        const events=Array.isArray(t.cycleEvents)?t.cycleEvents:[];
+        if(!events.length)return;
+        const dev=dByI(t.pdi,p);
+        events.forEach((c,idx)=>{
+          cycleRows.push({
+            'Proyecto':p.name,
+            'ID tarea':t.id,
+            'Nombre':t.name||'',
+            'Dev':dev?.name||'',
+            '#':idx+1,
+            'Evento':c.tipo,
+            'Fecha':c.fecha||'',
+            'Horas':(c.horas!=null?c.horas:'')
+          });
+        });
+      });
+    });
+    if(cycleRows.length){
+      const wsC=XLSX.utils.json_to_sheet(cycleRows);
+      wsC['!cols']=[{wch:26},{wch:14},{wch:30},{wch:18},{wch:4},{wch:13},{wch:12},{wch:8}];
+      XLSX.utils.book_append_sheet(wb,wsC,'Historial ciclos');
+    }
+
+    const d=new Date();
+    const fname=`Auditoria-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.xlsx`;
+    XLSX.writeFile(wb,fname);
+  }catch(err){console.error(err);alert('Error: '+err.message);}
+  finally{if(btn)btn.disabled=false;}
+}
+
 // ═══════════════════════════════════════════════════════════════
 // EVENT DELEGATION
 // ═══════════════════════════════════════════════════════════════
@@ -2876,7 +3691,14 @@ document.getElementById('root').addEventListener('change',function(e){
       const _newDev=allDevs(proj).find(d=>d.id===devId);
       if(_newTask&&_newDev){
         const _conf=_sch.filter(x=>x.id!==taskId&&x.estado!=='completado'&&x.adev&&x.adev.id===devId&&x.start<_newTask.end&&x.end>_newTask.start);
-        if(_conf.length>0)showToast('\u26a0 '+_newDev.name+' solapamiento con '+_conf.map(c=>c.id).join(', '),'error');
+        // Cross-proyecto: tareas activas del dev en otros proyectos
+        const _xConf=getDevConflicts(devId,_newTask.start,_newTask.end,proj.id+':'+taskId).filter(c=>c.projectId!==proj.id);
+        if(_conf.length>0)showToast('\u26a0 '+_newDev.name+' solapamiento local con '+_conf.map(c=>c.id).join(', '),'error');
+        else if(_xConf.length>0){
+          const c=_xConf[0];
+          const nextFree=getDevNextFree(devId,_newTask.start);
+          showToast(`\u26a0 ${_newDev.name} ocupado en ${c.projectName} (${c.taskId}). Pr\u00f3ximo libre: ${fmt(nextFree)}`,'error');
+        }
         else showToast('\u2713 '+_newDev.name+' disponible desde '+fmt(_newTask.start),'success');
       }
     }
