@@ -3373,6 +3373,7 @@ function exportExcel(){
       'WI Cliente':t.wiCliente||'',
       'WI DevOps':t.wiId||'',
       'Inicio':t.so||(t.start?iso(t.start):''),
+      'Entrega a Pruebas':t.eoDev||'',
       'Fin':t.eo||t.eoPlan||(t.end?iso(t.end):''),
       'Dependencias':(t.deps||[]).join(', ')
     }));
@@ -3386,7 +3387,7 @@ function exportExcel(){
       {wch:14},{wch:14},{wch:34},{wch:5},
       {wch:7},{wch:7},{wch:9},{wch:9},{wch:6},
       {wch:9},{wch:14},{wch:18},{wch:11},{wch:11},
-      {wch:12},{wch:12},{wch:20}
+      {wch:12},{wch:17},{wch:12},{wch:20}
     ];
 
     const wb=XLSX.utils.book_new();
