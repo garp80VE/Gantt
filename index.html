@@ -2230,7 +2230,8 @@ function render(){
         <th class="sk" style="left:0px"><button class="filter-btn" onclick="openFilterPopup(event,'estado')" title="Filtrar Estado">${filterButtonLabel('estado',proj)}</button></th>
         <th class="sk" style="left:108px"><button class="filter-btn" onclick="openFilterPopup(event,'id')" title="Filtrar ID">${filterButtonLabel('id',proj)}</button></th>
         <th><button class="filter-btn" onclick="openFilterPopup(event,'name')" title="Filtrar Nombre" style="max-width:128px;min-width:128px;">${filterButtonLabel('name',proj)}</button></th>
-        <th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th>
+        <th></th><th></th><th></th><th></th><th></th><th></th><th></th>
+        <th style="text-align:center;padding:2px 0;"><div style="display:inline-flex;gap:2px;justify-content:center;"><button onclick="bumpTestDaysProbando(-1)" title="Restar 1 día de pruebas cliente a TODAS las tareas en Probando" style="width:22px;height:22px;font-size:14px;border-radius:4px;border:0.5px solid #b4b2a9;background:#f1efe8;cursor:pointer;font-weight:700;line-height:1;color:#5f5e5a;">−</button><button onclick="bumpTestDaysProbando(1)" title="Sumar 1 día de pruebas cliente a TODAS las tareas en Probando" style="width:22px;height:22px;font-size:14px;border-radius:4px;border:0.5px solid #b4b2a9;background:#f1efe8;cursor:pointer;font-weight:700;line-height:1;color:#5f5e5a;">+</button></div></th>
         <th><button class="filter-btn" onclick="openFilterPopup(event,'dev')" title="Filtrar Dev" style="max-width:138px;min-width:138px;">${filterButtonLabel('dev',proj)}</button></th>
         <th></th><th></th><th></th><th></th><th></th><th></th><th></th>
       </tr></thead><tbody>`;
@@ -2613,6 +2614,29 @@ function calcEo(so,total,dev,hpd,delayDays=0,testDays=0){
   // Duration = ceil(hours / hpd) + extra days — avail% does NOT affect days
   const days=Math.max(1,Math.ceil(total/hpd)+(Math.max(0,parseInt(delayDays)||0))+(Math.max(0,parseInt(testDays)||0)));
   return iso(addWD(parseDate(so),days));
+}
+
+function bumpTestDaysProbando(delta){
+  const proj=activeProject();
+  let count=0;
+  proj.tasks.forEach(t=>{
+    if(t.estado==='pruebas_cliente'){
+      const cur=Math.max(0,parseInt(t.testDays)||0);
+      const newVal=Math.max(0,cur+delta);
+      if(newVal!==cur){
+        t.testDays=newVal;
+        recalcTaskPlanEnd(proj,t,t.id);
+        count++;
+      }
+    }
+  });
+  if(count===0){
+    showToast(delta<0?'No hay tareas en Probando con D.Pru. > 0':'No hay tareas en estado Probando','error');
+    return;
+  }
+  saveState();
+  render();
+  showToast(`${delta>0?'+':''}${delta} día D.Pru. en ${count} tarea${count===1?'':'s'} Probando`,'success');
 }
 
 function recalcTaskPlanEnd(proj,t,changedTaskId=null){
