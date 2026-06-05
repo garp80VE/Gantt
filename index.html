@@ -168,6 +168,7 @@ select.cs{font-size:11px;padding:2px 3px;border-radius:3px;border:0.5px solid #b
 .estado-nuevo{background:#e6f1fb;color:#0c447c;}
 .estado-aprobado{background:#f1efe8;color:#5f5e5a;}
 .estado-en_desarrollo{background:#b5d4f4;color:#0c447c;}
+.estado-resolviendo_incidencias{background:#faeeda;color:#b25500;}
 .estado-pausa_cliente{background:#faeeda;color:#633806;}
 .estado-pruebas_cliente{background:#E8E3FF;color:#4A3B8F;}
 .estado-en_garantia{background:#E3F6EE;color:#176B4D;}
@@ -343,7 +344,7 @@ const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','di
 const DW=14;
 const DAY_PX=15; // visual day width aligned with rendered gantt cells
 
-const DEF_DEVOPS={org:'',project:'',pat:'',autoSync:true,wiType:'Issue',areaPath:'',iterationPath:'',stNuevo:'New',stAprobado:'Approved',stEnDesarrollo:'Doing',stPausaCliente:'On Hold',stPruebasCliente:'Client Testing',stCompletado:'Done',stEnGarantia:'Warranty'};
+const DEF_DEVOPS={org:'',project:'',pat:'',autoSync:true,wiType:'Issue',areaPath:'',iterationPath:'',stNuevo:'New',stAprobado:'Approved',stEnDesarrollo:'Doing',stResolviendoIncidencias:'Resolving Issues',stPausaCliente:'On Hold',stPruebasCliente:'Client Testing',stCompletado:'Done',stEnGarantia:'Warranty'};
 const DEF_PROJECT={id:'',name:'Proyecto',color:'#378ADD',globalStart:'2026-03-20',hpd:8,devops:{...DEF_DEVOPS},filters:{estado:[],id:[],name:[],dev:[]},devs:[],tasks:[]};
 
 // ═══════════════════════════════════════════════════════════════
@@ -372,6 +373,7 @@ function sanitizeProject(p,i){
     if(!p.devops.stNuevo)p.devops.stNuevo='New';
     if(!p.devops.stAprobado)p.devops.stAprobado='Approved';
     if(!p.devops.stEnDesarrollo)p.devops.stEnDesarrollo='Doing';
+    if(!p.devops.stResolviendoIncidencias)p.devops.stResolviendoIncidencias='Resolving Issues';
     if(!p.devops.stPausaCliente)p.devops.stPausaCliente='On Hold';
     if(!p.devops.stPruebasCliente)p.devops.stPruebasCliente='Client Testing';
     if(!p.devops.stCompletado)p.devops.stCompletado='Done';
@@ -774,8 +776,8 @@ function calcTaskConsumedSummary(task,proj){
 }
 function gc(pi){return PAL[pi%PAL.length];}
 function dByI(id,proj){return (proj.devs||[]).find(d=>d.id===id)||G.globalDevs.find(d=>d.id===id);}
-function locked(t){return t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia';}
-function canSo(t){return t.estado==='nuevo'||t.estado==='aprobado'||t.estado==='en_desarrollo'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia';}
+function locked(t){return t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia';}
+function canSo(t){return t.estado==='nuevo'||t.estado==='aprobado'||t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia';}
 function calDays(a,b){const d=[];let x=new Date(a);while(x<=b){d.push(new Date(x));x.setDate(x.getDate()+1);}return d;}
 function mSpans(days){const s=[];let c=null;days.forEach(d=>{const k=d.getFullYear()*100+d.getMonth();if(!c||c.k!==k){c={k,label:MES[d.getMonth()]+' '+d.getFullYear(),n:0};s.push(c);}c.n++;});return s;}
 function pxL(d,mn){
@@ -841,12 +843,13 @@ function sortedTasks(proj){
   if(!proj.tasks||proj.tasks.length===0)return[];
   const done   =proj.tasks.filter(t=>t.estado==='completado').sort((a,b)=>a.pri-b.pri);
   const active =proj.tasks.filter(t=>t.estado==='en_desarrollo').sort((a,b)=>a.pri-b.pri);
+  const fixing =proj.tasks.filter(t=>t.estado==='resolviendo_incidencias').sort((a,b)=>a.pri-b.pri);
   const paused =proj.tasks.filter(t=>t.estado==='pausa_cliente').sort((a,b)=>a.pri-b.pri);
   const client =proj.tasks.filter(t=>t.estado==='pruebas_cliente').sort((a,b)=>a.pri-b.pri);
   const warranty=proj.tasks.filter(t=>t.estado==='en_garantia').sort((a,b)=>a.pri-b.pri);
   const approved=proj.tasks.filter(t=>t.estado==='aprobado').sort((a,b)=>a.pri-b.pri);
   const nuevo =proj.tasks.filter(t=>t.estado==='nuevo').sort((a,b)=>a.pri-b.pri);
-  return [...done,...active,...paused,...client,...approved,...nuevo,...warranty];
+  return [...done,...active,...fixing,...paused,...client,...approved,...nuevo,...warranty];
 }
 
 function displaySortedTasks(tasks){
@@ -911,7 +914,7 @@ function sched(proj){
   // Pre-load df and lockedHours only from tasks still consuming agenda.
   // Terminated tasks are historical records and must NOT block planning.
   proj.tasks.forEach(t=>{
-    if((t.estado==='en_desarrollo'||t.estado==='en_garantia')&&t.pdi){
+    if((t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='en_garantia')&&t.pdi){
       if(t.eo&&df[t.pdi]!==undefined){
         const freeFrom=nextWD(parseDate(t.eo));
         if(freeFrom>df[t.pdi])df[t.pdi]=new Date(freeFrom);
@@ -1017,7 +1020,7 @@ function sched(proj){
     const dn=daysNeeded(t);
 
     // ── LOCKED / HISTORICAL TASKS ─────────────────────────────────────
-    if(t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia'){
+    if(t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia'){
       const adev=dByI(t.pdi,proj)||devs[0];
       const fs=t.so?parseDate(t.so):nxWD(new Date(df[adev.id]>depEnd?df[adev.id]:depEnd));
       const fe = t.estado==='completado'
@@ -1025,7 +1028,7 @@ function sched(proj){
         : (t.eo ? parseDate(t.eo) : addWD(fs,dn));
 
       // Only tasks still in progress should continue blocking the developer.
-      if((t.estado==='en_desarrollo'||t.estado==='en_garantia')&&df[adev.id]!==undefined&&nextWD(fe)>df[adev.id])df[adev.id]=nextWD(fe);
+      if((t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='en_garantia')&&df[adev.id]!==undefined&&nextWD(fe)>df[adev.id])df[adev.id]=nextWD(fe);
 
       fm[t.id]=new Date(fe);
       res.push({...t,adev,start:fs,end:fe,days:taskDisplayDays(t,proj),spanDays:dn,hols:holsIn(fs,fe)});
@@ -1070,7 +1073,7 @@ function sched(proj){
         if(
           x.id!==t.id &&
           x.pdi===chosenDev.id &&
-          (x.estado==='en_desarrollo'||x.estado==='pausa_cliente'||x.estado==='pruebas_cliente'||x.estado==='en_garantia') &&
+          (x.estado==='en_desarrollo'||x.estado==='resolviendo_incidencias'||x.estado==='pausa_cliente'||x.estado==='pruebas_cliente'||x.estado==='en_garantia') &&
           x.eo
         ){
           const lockedFreeFrom=nextWD(parseDate(x.eo));
@@ -1219,6 +1222,7 @@ function getEstadoWI(estado,proj){
   if(estado==='nuevo') return d.stNuevo||'New';
   if(estado==='aprobado') return d.stAprobado||'Approved';
   if(estado==='en_desarrollo') return d.stEnDesarrollo||'Doing';
+  if(estado==='resolviendo_incidencias') return d.stResolviendoIncidencias||'Resolving Issues';
   if(estado==='pausa_cliente') return d.stPausaCliente||'On Hold';
   if(estado==='pruebas_cliente') return d.stPruebasCliente||'Client Testing';
   if(estado==='completado') return d.stCompletado||d.stTerminado||'Done';
@@ -1815,7 +1819,7 @@ function filterButtonLabel(field,proj){
   if(vals.length===1){
     const v=vals[0];
     const label=field==='estado'
-      ? ({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'}[v]||v)
+      ? ({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'}[v]||v)
       : v;
     return label+' ▾';
   }
@@ -1835,7 +1839,7 @@ function renderFilterPopupBody(field,proj){
   }else{
     options.forEach(opt=>{
       const checked=(allMode||selected.includes(opt))?'checked':'';
-      const label=field==='estado'?({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'}[opt]||opt):opt;
+      const label=field==='estado'?({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'}[opt]||opt):opt;
       html+='<label><input type="checkbox" '+checked+' data-action="toggle" data-field="'+field+'" data-value="'+String(opt).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"> '+label+'</label>';
     });
   }
@@ -2045,6 +2049,8 @@ function render(){
           <input id="do-st-approved" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stAprobado||'Approved'}" onblur="saveDevopsConfig()" readonly disabled>
           <span style="font-size:11px;color:#5f5e5a">En desarrollo→</span>
           <input id="do-st-dev" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stEnDesarrollo||'Doing'}" onblur="saveDevopsConfig()" readonly disabled>
+          <span style="font-size:11px;color:#5f5e5a">Resolviendo→</span>
+          <input id="do-st-fixing" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:120px;background:#f5f5f3;" value="${proj.devops.stResolviendoIncidencias||'Resolving Issues'}" onblur="saveDevopsConfig()" readonly disabled>
           <span style="font-size:11px;color:#5f5e5a">Pausado→</span>
           <input id="do-st-pause" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stPausaCliente||'On Hold'}" onblur="saveDevopsConfig()" readonly disabled>
           <span style="font-size:11px;color:#5f5e5a">Probando→</span>
@@ -2148,6 +2154,7 @@ function render(){
     <div class="sc"><div class="sc-label">Duración</div><div class="sc-val">${wdB(minD,maxD)}</div><div class="sc-sub">días · ${tW} sem.</div></div>
     <div class="sc"><div class="sc-label">Completados</div><div class="sc-val">${sch.filter(t=>t.estado==='completado').length}<span style="font-size:12px;color:#888780">/${sch.length}</span></div></div>
     <div class="sc"><div class="sc-label">En desarrollo</div><div class="sc-val">${sch.filter(t=>t.estado==='en_desarrollo').length}</div></div>
+    <div class="sc"><div class="sc-label" style="color:#b25500">Resolviendo</div><div class="sc-val" style="color:#b25500">${sch.filter(t=>t.estado==='resolviendo_incidencias').length}</div><div class="sc-sub">incidencias</div></div>
     <div class="sc"><div class="sc-label">Horas Backlog</div><div class="sc-val">${backlogH}</div><div class="sc-sub">estado Nuevo</div></div>
     <div class="sc"><div class="sc-label">Horas Comprometidas</div><div class="sc-val">${committedH}</div><div class="sc-sub">Aprobado+</div></div>
     <div class="sc"><div class="sc-label">Horas restantes</div><div class="sc-val">${remainingCommittedH}</div><div class="sc-sub">comprometidas - completadas</div></div>
@@ -2278,12 +2285,20 @@ function render(){
       <button class="dep-btn" onclick="openDepPopup(event,'${t.id}','${projId}')" title="${t.deps.join(', ')||'ninguna'}">${depLbl} ▾</button>
     </td>`;
 
+    // Lógica híbrida del dropdown:
+    // - Si la tarea ya pasó por probando (tiene eoDev), oculta "En desarrollo" y muestra "Resolviendo incidencias"
+    // - Si no, muestra "En desarrollo" normal
+    // - Si el estado actual es uno y debería ser el otro (legacy), ambos se muestran
+    const _hasDelivered=!!t.eoDev;
+    const _showEnDes=!_hasDelivered||t.estado==='en_desarrollo';
+    const _showRes=_hasDelivered||t.estado==='resolviendo_incidencias';
     h+=`<tr class="${t.estado==='completado'?'row-completado':''}">
       <td class="sk" style="left:0">
         <select class="estado-select estado-${t.estado}" data-taskid="${t.id}">
           <option value="nuevo" ${t.estado==='nuevo'?'selected':''}>Nuevo</option>
           <option value="aprobado" ${t.estado==='aprobado'?'selected':''}>Aprobado</option>
-          <option value="en_desarrollo" ${t.estado==='en_desarrollo'?'selected':''}>En desarrollo</option>
+          ${_showEnDes?`<option value="en_desarrollo" ${t.estado==='en_desarrollo'?'selected':''}>En desarrollo</option>`:''}
+          ${_showRes?`<option value="resolviendo_incidencias" ${t.estado==='resolviendo_incidencias'?'selected':''}>Resolviendo incidencias</option>`:''}
           <option value="pausa_cliente" ${t.estado==='pausa_cliente'?'selected':''}>Pausado</option>
           <option value="pruebas_cliente" ${t.estado==='pruebas_cliente'?'selected':''}>Probando</option>
           <option value="completado" ${t.estado==='completado'?'selected':''}>Completado</option>
@@ -2515,7 +2530,7 @@ function setE(taskId,v){
 
     // Pausado / Probando / Garantía:
     // mantener fechas visibles y reajustarlas si existen
-    if(v==='pausa_cliente'||v==='pruebas_cliente'||v==='en_garantia'||v==='en_desarrollo'){
+    if(v==='pausa_cliente'||v==='pruebas_cliente'||v==='en_garantia'||v==='en_desarrollo'||v==='resolviendo_incidencias'){
       if(t.so){
         const recalculatedEnd = calcEo(
           t.so,
@@ -2543,8 +2558,8 @@ function setE(taskId,v){
   if((v==='pruebas_cliente'||v==='completado') && !t.eoDev){
     t.eoDev = iso(TODAY);
   }
-  // Sale de Probando hacia Desarrollo → arranca contador de retrabajo + registra devolución
-  if(v==='en_desarrollo' && prev==='pruebas_cliente'){
+  // Sale de Probando hacia Desarrollo/Resolviendo → arranca contador de retrabajo + registra devolución
+  if((v==='en_desarrollo'||v==='resolviendo_incidencias') && prev==='pruebas_cliente'){
     t._reworkStart = iso(TODAY);
     if(!Array.isArray(t.cycleEvents))t.cycleEvents=[];
     t.cycleEvents.push({tipo:'devolución',fecha:iso(TODAY)});
@@ -2724,7 +2739,7 @@ function sf(taskId,field,value){
       const dev=allDevs(proj).find(d=>d.id===t.pdi);
       const conflict=proj.tasks.find(x=>
         x.id!==taskId&&x.pdi===t.pdi&&
-        (x.estado==='en_desarrollo'||x.estado==='en_garantia')&&
+        (x.estado==='en_desarrollo'||x.estado==='resolviendo_incidencias'||x.estado==='en_garantia')&&
         x.so&&x.eo&&
         norm(parseDate(x.so))<=norm(parseDate(value))&&
         norm(parseDate(value))<=norm(parseDate(x.eo))
@@ -2983,6 +2998,7 @@ function saveDevopsConfig(){
   proj.devops.stNuevo=document.getElementById('do-st-new')?.value.trim()||'New';
   proj.devops.stAprobado=document.getElementById('do-st-approved')?.value.trim()||'Approved';
   proj.devops.stEnDesarrollo=document.getElementById('do-st-dev')?.value.trim()||'Doing';
+  proj.devops.stResolviendoIncidencias=document.getElementById('do-st-fixing')?.value.trim()||'Resolving Issues';
   proj.devops.stPausaCliente=document.getElementById('do-st-pause')?.value.trim()||'On Hold';
   proj.devops.stPruebasCliente=document.getElementById('do-st-clienttest')?.value.trim()||'Client Testing';
   proj.devops.stCompletado=document.getElementById('do-st-done')?.value.trim()||proj.devops.stCompletado||'Done';
@@ -3135,6 +3151,7 @@ async function fetchWIStates(){
         <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
           <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Nuevo →</label><select id="pick-new" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div><div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Aprobado →</label><select id="pick-approved" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
           <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">En desarrollo →</label><select id="pick-dev" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
+          <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Resolviendo →</label><select id="pick-fixing" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
           <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Pausado →</label><select id="pick-pause" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
           <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Probando →</label><select id="pick-clienttest" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
           <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Completado →</label><select id="pick-done" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
@@ -3147,6 +3164,7 @@ async function fetchWIStates(){
     trySelect('pick-new',['new','pending','to do']);
     trySelect('pick-approved',['approved','aprobado','to do','pending']);
     trySelect('pick-dev',['develop','doing','progress','activo','active']);
+    trySelect('pick-fixing',['resolv','fix','bug','incident','rework','retrabaj']);
     trySelect('pick-pause',['hold','pause','paused','waiting','blocked','on hold']);
     trySelect('pick-clienttest',['test','testing','qa','uat','client','delivered']);
     trySelect('pick-done',['done','complet','resolv','completado','closed']);
@@ -3159,6 +3177,7 @@ function applyPickedStates(){
   proj.devops.stNuevo=document.getElementById('pick-new')?.value||proj.devops.stNuevo;
   proj.devops.stAprobado=document.getElementById('pick-approved')?.value||proj.devops.stAprobado;
   proj.devops.stEnDesarrollo=document.getElementById('pick-dev')?.value||proj.devops.stEnDesarrollo;
+  proj.devops.stResolviendoIncidencias=document.getElementById('pick-fixing')?.value||proj.devops.stResolviendoIncidencias;
   proj.devops.stPausaCliente=document.getElementById('pick-pause')?.value||proj.devops.stPausaCliente;
   proj.devops.stPruebasCliente=document.getElementById('pick-clienttest')?.value||proj.devops.stPruebasCliente;
   proj.devops.stCompletado=document.getElementById('pick-done')?.value||proj.devops.stCompletado||proj.devops.stTerminado;
@@ -3340,11 +3359,11 @@ async function exportPDF(){
           const col=gc(t.adev?.pi||0);const bg=t.estado==='completado'?'#16A34A':col.bar,fg=t.estado==='completado'?'#ffffff':col.text;
       
 
-          const estBg=t.estado==='nuevo'?'#e6f1fb':t.estado==='aprobado'?'#f1efe8':t.estado==='completado'?'#9fe1cb':t.estado==='en_desarrollo'?'#b5d4f4':t.estado==='pausa_cliente'?'#faeeda':t.estado==='pruebas_cliente'?'#E8E3FF':t.estado==='en_garantia'?'#E3F6EE':'#f1efe8';
-          const estCl=t.estado==='nuevo'?'#0c447c':t.estado==='aprobado'?'#5f5e5a':t.estado==='completado'?'#085041':t.estado==='en_desarrollo'?'#0c447c':t.estado==='pausa_cliente'?'#633806':t.estado==='pruebas_cliente'?'#4A3B8F':t.estado==='en_garantia'?'#176B4D':'#5f5e5a';
+          const estBg=t.estado==='nuevo'?'#e6f1fb':t.estado==='aprobado'?'#f1efe8':t.estado==='completado'?'#9fe1cb':t.estado==='en_desarrollo'?'#b5d4f4':t.estado==='resolviendo_incidencias'?'#faeeda':t.estado==='pausa_cliente'?'#faeeda':t.estado==='pruebas_cliente'?'#E8E3FF':t.estado==='en_garantia'?'#E3F6EE':'#f1efe8';
+          const estCl=t.estado==='nuevo'?'#0c447c':t.estado==='aprobado'?'#5f5e5a':t.estado==='completado'?'#085041':t.estado==='en_desarrollo'?'#0c447c':t.estado==='resolviendo_incidencias'?'#b25500':t.estado==='pausa_cliente'?'#633806':t.estado==='pruebas_cliente'?'#4A3B8F':t.estado==='en_garantia'?'#176B4D':'#5f5e5a';
           const rowBg=i%2===0?'#fff':'#fafaf8';
           return `<tr style="opacity:${t.estado==='completado'?'0.6':'1'}">
-            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};"><span style="background:${estBg};color:${estCl};font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;">${t.estado==='nuevo'?'Nuevo':t.estado==='aprobado'?'Aprobado':t.estado==='en_desarrollo'?'En desarrollo':t.estado==='pausa_cliente'?'Pausado':t.estado==='pruebas_cliente'?'Probando':t.estado==='completado'?'Completado':t.estado==='en_garantia'?'En Garantía':'Aprobado'}</span></td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};"><span style="background:${estBg};color:${estCl};font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;">${t.estado==='nuevo'?'Nuevo':t.estado==='aprobado'?'Aprobado':t.estado==='en_desarrollo'?'En desarrollo':t.estado==='resolviendo_incidencias'?'Resolviendo incidencias':t.estado==='pausa_cliente'?'Pausado':t.estado==='pruebas_cliente'?'Probando':t.estado==='completado'?'Completado':t.estado==='en_garantia'?'En Garantía':'Aprobado'}</span></td>
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};font-weight:500;white-space:nowrap;">${t.id}</td>
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};">${t.name}</td>
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};text-align:center;font-weight:500;">${t.pri}</td>
@@ -3402,7 +3421,7 @@ function exportExcel(){
     const visible=displaySortedTasks(sch).filter(t=>taskMatchesFilters(t,proj));
     if(!visible.length){alert('No hay tareas para exportar (revisa los filtros activos).');return;}
 
-    const estLabel={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'};
+    const estLabel={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'};
     const hpd=proj.hpd||8;
 
     const rows=visible.map(t=>({
@@ -3535,7 +3554,7 @@ function exportAudit(){
   const btn=document.getElementById('btn-audit');
   if(btn)btn.disabled=true;
   try{
-    const estLabel={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'};
+    const estLabel={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'};
     const wb=XLSX.utils.book_new();
 
     // ── Hoja Resumen
