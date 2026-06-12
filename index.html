@@ -124,19 +124,19 @@ header{background:#fff;border-bottom:0.5px solid #d3d1c7;padding:10px 20px;displ
 
 /* ── Gantt table ── */
 .left-scroll-wrap{overflow-x:auto;border:0.5px solid #d3d1c7;border-radius:10px;background:#fff;}
-.gantt-table-split{border-collapse:collapse;font-size:12px;width:max-content;}
-.gantt-table-split th,.gantt-table-split td{padding:3px 6px;border-right:0.5px solid #d3d1c7;border-bottom:0.5px solid #d3d1c7;vertical-align:middle;white-space:nowrap;}
-.gantt-table-split th{background:#f1efe8;color:#5f5e5a;font-weight:500;font-size:11px;}
+.gantt-table-split{border-collapse:collapse;font-size:12px;width:max-content;color:#1a1a18;}
+.gantt-table-split th,.gantt-table-split td{padding:3px 6px;border-right:0.5px solid #d3d1c7;border-bottom:0.5px solid #d3d1c7;vertical-align:middle;white-space:nowrap;font-weight:600;color:#1a1a18;}
+.gantt-table-split th{background:#f1efe8;color:#1a1a18;font-weight:700;font-size:11px;}
 .gantt-table-split tr:nth-child(even) td{background:#fafaf8;}
 .gantt-table-split .total-row td{font-weight:500;background:#f1efe8!important;}
 .gantt-table-split .add-row td{background:#fff!important;border-top:1.5px dashed #b4b2a9;}
-.gantt-table-split tr.row-completado td{opacity:.55;}
+.gantt-table-split tr.row-completado td{opacity:.85;}
 .gantt-table-split td.sk,.gantt-table-split th.sk{position:sticky;z-index:2;background:#fff;box-shadow:1px 0 0 #d3d1c7;}
 .gantt-table-split th.sk{background:#f1efe8;z-index:3;}
 .gantt-table-split tr:nth-child(even) td.sk{background:#fafaf8;}
 .gantt-table-split .total-row td.sk{background:#f1efe8!important;}
 .gantt-table-split .add-row td.sk{background:#fff!important;}
-.gantt-table-split tr.row-completado td.sk{opacity:.55;}
+.gantt-table-split tr.row-completado td.sk{opacity:.85;}
 .gantt-table-split th.sk-last,.gantt-table-split td.sk-last{position:sticky;z-index:2;background:#fff;box-shadow:3px 0 6px -1px rgba(0,0,0,0.12);}
 .gantt-table-split th.sk-last{background:#f1efe8;z-index:3;}
 .gantt-table-split tr:nth-child(even) td.sk-last{background:#fafaf8;}
@@ -158,13 +158,13 @@ header{background:#fff;border-bottom:0.5px solid #d3d1c7;padding:10px 20px;displ
 .gantt-test-seg{z-index:1;background:#7F77DD;}
 .gantt-gar-seg{z-index:1;background:#1D9E75;}
 .gantt-bar-label{position:absolute;left:6px;top:50%;transform:translateY(-50%);z-index:3;font-size:9px;font-weight:700;color:#fff;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,0.35);pointer-events:none;}
-input.ce{font-size:11px;padding:2px 5px;border-radius:3px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;}
-input.ce.ov{border-color:#ba7517;color:#ba7517;}
-input.ce:disabled,select.cs:disabled{opacity:.5;cursor:not-allowed;background:#f5f5f3;}
-input.ce-pri{font-size:12px;padding:3px 6px;border-radius:4px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;width:52px;text-align:center;font-weight:500;}
-input.ce-pri:disabled{opacity:.5;cursor:not-allowed;background:#f5f5f3;}
-select.cs{font-size:11px;padding:2px 3px;border-radius:3px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;}
-.estado-select{font-size:11px;padding:2px 7px;border-radius:10px;border:none;cursor:pointer;font-weight:500;appearance:none;-webkit-appearance:none;text-align:center;}
+input.ce{font-size:12px;padding:2px 5px;border-radius:3px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;font-weight:600;}
+input.ce.ov{border-color:#ba7517;color:#8a5511;}
+input.ce:disabled,select.cs:disabled{opacity:.8;cursor:not-allowed;background:#f5f5f3;color:#1a1a18;}
+input.ce-pri{font-size:12px;padding:3px 6px;border-radius:4px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;width:52px;text-align:center;font-weight:700;}
+input.ce-pri:disabled{opacity:.8;cursor:not-allowed;background:#f5f5f3;color:#1a1a18;}
+select.cs{font-size:12px;padding:2px 3px;border-radius:3px;border:0.5px solid #b4b2a9;background:#fff;color:#1a1a18;font-weight:600;}
+.estado-select{font-size:11px;padding:2px 7px;border-radius:10px;border:none;cursor:pointer;font-weight:700;appearance:none;-webkit-appearance:none;text-align:center;}
 .estado-nuevo{background:#e6f1fb;color:#0c447c;}
 .estado-aprobado{background:#f1efe8;color:#5f5e5a;}
 .estado-en_desarrollo{background:#b5d4f4;color:#0c447c;}
