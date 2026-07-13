@@ -173,6 +173,7 @@ select.cs{font-size:12px;padding:2px 3px;border-radius:3px;border:0.5px solid #b
 .estado-pruebas_cliente{background:#E8E3FF;color:#4A3B8F;}
 .estado-en_garantia{background:#E3F6EE;color:#176B4D;}
 .estado-completado{background:#9fe1cb;color:#085041;}
+.estado-descartado_cliente{background:#e8e5df;color:#5f0a0a;text-decoration:line-through;}
 
 
 .
@@ -344,7 +345,7 @@ const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','di
 const DW=14;
 const DAY_PX=15; // visual day width aligned with rendered gantt cells
 
-const DEF_DEVOPS={org:'',project:'',pat:'',autoSync:true,wiType:'Issue',areaPath:'',iterationPath:'',stNuevo:'New',stAprobado:'Approved',stEnDesarrollo:'Doing',stResolviendoIncidencias:'Resolving Issues',stPausaCliente:'On Hold',stPruebasCliente:'Client Testing',stCompletado:'Done',stEnGarantia:'Warranty'};
+const DEF_DEVOPS={org:'',project:'',pat:'',autoSync:true,wiType:'Issue',areaPath:'',iterationPath:'',stNuevo:'New',stAprobado:'Approved',stEnDesarrollo:'Doing',stResolviendoIncidencias:'Resolving Issues',stPausaCliente:'On Hold',stPruebasCliente:'Client Testing',stCompletado:'Done',stEnGarantia:'Warranty',stDescartadoCliente:'Cancelled'};
 const DEF_PROJECT={id:'',name:'Proyecto',color:'#378ADD',globalStart:'2026-03-20',hpd:8,devops:{...DEF_DEVOPS},filters:{estado:[],id:[],name:[],dev:[]},devs:[],tasks:[]};
 
 // ═══════════════════════════════════════════════════════════════
@@ -378,6 +379,7 @@ function sanitizeProject(p,i){
     if(!p.devops.stPruebasCliente)p.devops.stPruebasCliente='Client Testing';
     if(!p.devops.stCompletado)p.devops.stCompletado='Done';
     if(!p.devops.stEnGarantia)p.devops.stEnGarantia='Warranty';
+    if(!p.devops.stDescartadoCliente)p.devops.stDescartadoCliente='Cancelled';
     if(!p.devops.wiType)p.devops.wiType='Issue';
     if(p.devops.stTerminado&&!p.devops.stCompletado)p.devops.stCompletado=p.devops.stTerminado;
     if(p.devops.autoSync===undefined)p.devops.autoSync=true;
@@ -419,6 +421,8 @@ function sanitizeProject(p,i){
     t.horasRetrabajo=Math.max(0,Number(t.horasRetrabajo)||0);
     if(t._reworkStart===undefined)t._reworkStart=null;
     if(!Array.isArray(t.cycleEvents))t.cycleEvents=[];
+    if(t.motivoDescarte===undefined||t.motivoDescarte===null)t.motivoDescarte='';
+    if(t.fechaDescarte===undefined)t.fechaDescarte=null;
     if(t.estado==='terminado')t.estado='completado';
     if(t.estado==='pausado')t.estado='pausa_cliente';
     if(t.estado==='pendiente')t.estado='aprobado';
@@ -776,8 +780,8 @@ function calcTaskConsumedSummary(task,proj){
 }
 function gc(pi){return PAL[pi%PAL.length];}
 function dByI(id,proj){return (proj.devs||[]).find(d=>d.id===id)||G.globalDevs.find(d=>d.id===id);}
-function locked(t){return t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia';}
-function canSo(t){return t.estado==='nuevo'||t.estado==='aprobado'||t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia';}
+function locked(t){return t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia'||t.estado==='descartado_cliente';}
+function canSo(t){return t.estado==='nuevo'||t.estado==='aprobado'||t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia'||t.estado==='descartado_cliente';}
 function calDays(a,b){const d=[];let x=new Date(a);while(x<=b){d.push(new Date(x));x.setDate(x.getDate()+1);}return d;}
 function mSpans(days){const s=[];let c=null;days.forEach(d=>{const k=d.getFullYear()*100+d.getMonth();if(!c||c.k!==k){c={k,label:MES[d.getMonth()]+' '+d.getFullYear(),n:0};s.push(c);}c.n++;});return s;}
 function pxL(d,mn){
@@ -849,7 +853,8 @@ function sortedTasks(proj){
   const warranty=proj.tasks.filter(t=>t.estado==='en_garantia').sort((a,b)=>a.pri-b.pri);
   const approved=proj.tasks.filter(t=>t.estado==='aprobado').sort((a,b)=>a.pri-b.pri);
   const nuevo =proj.tasks.filter(t=>t.estado==='nuevo').sort((a,b)=>a.pri-b.pri);
-  return [...done,...active,...fixing,...paused,...client,...approved,...nuevo,...warranty];
+  const discarded=proj.tasks.filter(t=>t.estado==='descartado_cliente').sort((a,b)=>a.pri-b.pri);
+  return [...done,...active,...fixing,...paused,...client,...approved,...nuevo,...warranty,...discarded];
 }
 
 function displaySortedTasks(tasks){
@@ -1020,10 +1025,10 @@ function sched(proj){
     const dn=daysNeeded(t);
 
     // ── LOCKED / HISTORICAL TASKS ─────────────────────────────────────
-    if(t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia'){
+    if(t.estado==='completado'||t.estado==='en_desarrollo'||t.estado==='resolviendo_incidencias'||t.estado==='pausa_cliente'||t.estado==='pruebas_cliente'||t.estado==='en_garantia'||t.estado==='descartado_cliente'){
       const adev=dByI(t.pdi,proj)||devs[0];
       const fs=t.so?parseDate(t.so):nxWD(new Date(df[adev.id]>depEnd?df[adev.id]:depEnd));
-      const fe = t.estado==='completado'
+      const fe = (t.estado==='completado'||t.estado==='descartado_cliente')
         ? parseDate(t.eoReal||t.eo||t.eoPlan||iso(fs))
         : (t.eo ? parseDate(t.eo) : addWD(fs,dn));
 
@@ -1223,6 +1228,7 @@ function getEstadoWI(estado,proj){
   if(estado==='aprobado') return d.stAprobado||'Approved';
   if(estado==='en_desarrollo') return d.stEnDesarrollo||'Doing';
   if(estado==='resolviendo_incidencias') return d.stResolviendoIncidencias||'Resolving Issues';
+  if(estado==='descartado_cliente') return d.stDescartadoCliente||'Cancelled';
   if(estado==='pausa_cliente') return d.stPausaCliente||'On Hold';
   if(estado==='pruebas_cliente') return d.stPruebasCliente||'Client Testing';
   if(estado==='completado') return d.stCompletado||d.stTerminado||'Done';
@@ -1819,7 +1825,7 @@ function filterButtonLabel(field,proj){
   if(vals.length===1){
     const v=vals[0];
     const label=field==='estado'
-      ? ({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'}[v]||v)
+      ? ({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía',descartado_cliente:'Descartado por cliente'}[v]||v)
       : v;
     return label+' ▾';
   }
@@ -1839,7 +1845,7 @@ function renderFilterPopupBody(field,proj){
   }else{
     options.forEach(opt=>{
       const checked=(allMode||selected.includes(opt))?'checked':'';
-      const label=field==='estado'?({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'}[opt]||opt):opt;
+      const label=field==='estado'?({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía',descartado_cliente:'Descartado por cliente'}[opt]||opt):opt;
       html+='<label><input type="checkbox" '+checked+' data-action="toggle" data-field="'+field+'" data-value="'+String(opt).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"> '+label+'</label>';
     });
   }
@@ -2059,6 +2065,8 @@ function render(){
           <input id="do-st-done" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stCompletado||'Done'}" onblur="saveDevopsConfig()" readonly disabled>
           <span style="font-size:11px;color:#5f5e5a">En Garantía→</span>
           <input id="do-st-warranty" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stEnGarantia||'Warranty'}" onblur="saveDevopsConfig()" readonly disabled>
+          <span style="font-size:11px;color:#5f5e5a">Descartado→</span>
+          <input id="do-st-cancelled" style="font-size:11px;padding:2px 6px;border-radius:4px;border:0.5px solid #b4b2a9;width:100px;background:#f5f5f3;" value="${proj.devops.stDescartadoCliente||'Cancelled'}" onblur="saveDevopsConfig()" readonly disabled>
           <button onclick="testConnection()" id="btn-test-conn" style="font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;border:0.5px solid #0078d4;background:#e6f1fb;color:#0078d4;">Probar conexión</button>
           <button onclick="fetchWIStates()" style="font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;border:0.5px solid #b4b2a9;background:#f1efe8;color:#5f5e5a;">⟳ Consultar estados</button>
         </div>
@@ -2303,10 +2311,11 @@ function render(){
           <option value="pruebas_cliente" ${t.estado==='pruebas_cliente'?'selected':''}>Probando</option>
           <option value="completado" ${t.estado==='completado'?'selected':''}>Completado</option>
           <option value="en_garantia" ${t.estado==='en_garantia'?'selected':''}>En Garantía</option>
+          <option value="descartado_cliente" ${t.estado==='descartado_cliente'?'selected':''}>Descartado por cliente</option>
         </select>
       </td>
       <td class="sk" style="left:108px"><input class="ce" style="width:80px;font-weight:500" value="${t.id}" onchange="sfId('${t.id}',this.value)" ${vDis?'disabled':''}></td>
-      <td><input class="ce" style="min-width:128px" value="${t.name}" onchange="sf('${t.id}','name',this.value)" ${vDis?'disabled':''}>${hOs||hOe?'<span class="ov-dot"></span>':''}</td>
+      <td><input class="ce" style="min-width:128px" value="${t.name}" onchange="sf('${t.id}','name',this.value)" ${vDis?'disabled':''}>${hOs||hOe?'<span class="ov-dot"></span>':''}${t.estado==='descartado_cliente'&&t.motivoDescarte?`<div style="font-size:9px;color:#7a2a2a;margin-top:2px;font-weight:600;cursor:help;" title="Motivo: ${String(t.motivoDescarte).replace(/"/g,'&quot;')}">✕ ${t.motivoDescarte.slice(0,42)}${t.motivoDescarte.length>42?'…':''}</div>`:''}</td>
       <td style="text-align:center"><input class="ce-pri" type="number" min="1" value="${t.pri}" onkeydown="priKeydown(event,'${t.id}')" onblur="priBlu(event,'${t.id}')" ${vDis?'disabled':''}></td>
       <td style="text-align:center"><input class="ce" style="width:48px;text-align:center" type="number" min="0" value="${t.hDev||0}" onchange="sfH('${t.id}','hDev',this.value)" ${vDis?'disabled':''}></td>
       <td style="text-align:center"><input class="ce" style="width:48px;text-align:center" type="number" min="0" value="${t.hTest||0}" onchange="sfH('${t.id}','hTest',this.value)" ${vDis?'disabled':''}></td>
@@ -2460,6 +2469,12 @@ function setE(taskId,v){
   const prev=t.estado;
   const scheduledBefore=sched(proj).sch.find(x=>x.id===taskId);
 
+  if(v==='descartado_cliente'){
+    // Requiere motivo — abrir modal. Si cancelan, se revierte al estado previo.
+    promptDescarteMotivo(taskId,prev);
+    return;
+  }
+
   if(v==='completado'){
     const plannedEnd=t.eoPlan||t.eo||scheduledBefore?.eo||scheduledBefore?.eoPlan||(scheduledBefore?.end?iso(scheduledBefore.end):null)||null;
 
@@ -2577,6 +2592,44 @@ function setE(taskId,v){
   render();
   requestAnimationFrame(()=>applyRealBarPositions());
   if(pendingReworkPrompt) promptReworkHours(taskId);
+}
+
+function promptDescarteMotivo(taskId,prevEstado){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);
+  if(!t)return;
+  // Restaurar visualmente el select al estado previo inmediatamente,
+  // así si cancela por backdrop/Esc/botón el select queda coherente
+  const sel=document.querySelector(`.estado-select[data-taskid="${taskId}"]`);
+  if(sel)sel.value=prevEstado||t.estado;
+
+  const existing=String(t.motivoDescarte||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const body=`
+    <p style="font-size:13px;margin-bottom:10px;">Indica el motivo por el cual el cliente descartó esta tarea.</p>
+    <textarea id="descarte-motivo" style="width:100%;min-height:100px;padding:8px 10px;font-size:13px;border:1px solid #b4b2a9;border-radius:6px;font-family:inherit;resize:vertical;" placeholder="Ej: El cliente cambió de estrategia y ya no requiere esta funcionalidad.">${existing}</textarea>
+    <p style="font-size:11px;color:#888780;margin-top:8px;">La fecha de descarte quedará registrada como ${fmt(TODAY)}.</p>
+  `;
+  showModal('Descartado por cliente — Motivo',body,()=>{
+    const inp=document.getElementById('descarte-motivo');
+    const motivo=String(inp?.value||'').trim();
+    if(!motivo){
+      showToast('El motivo es obligatorio. Estado revertido.','error');
+      return;
+    }
+    t.motivoDescarte=motivo;
+    t.fechaDescarte=iso(TODAY);
+    if(!t.eoReal)t.eoReal=iso(TODAY);
+    if(!t.eo)t.eo=t.eoReal;
+    t.estado='descartado_cliente';
+    saveState();
+    if(proj.devops.autoSync&&t.wiId)syncWIState(taskId,'descartado_cliente');
+    render();
+    showToast('Tarea marcada como descartada por cliente','success');
+  });
+  setTimeout(()=>{
+    const ta=document.getElementById('descarte-motivo');
+    if(ta)ta.focus();
+  },50);
 }
 
 function promptReworkHours(taskId){
@@ -3003,6 +3056,7 @@ function saveDevopsConfig(){
   proj.devops.stPruebasCliente=document.getElementById('do-st-clienttest')?.value.trim()||'Client Testing';
   proj.devops.stCompletado=document.getElementById('do-st-done')?.value.trim()||proj.devops.stCompletado||'Done';
   proj.devops.stEnGarantia=document.getElementById('do-st-warranty')?.value.trim()||'Warranty';
+  proj.devops.stDescartadoCliente=document.getElementById('do-st-cancelled')?.value.trim()||'Cancelled';
   saveState();render();
   if(devopsConfigured(proj))showToast('✓ Configuración DevOps guardada','success');
 }
@@ -3156,6 +3210,7 @@ async function fetchWIStates(){
           <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Probando →</label><select id="pick-clienttest" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
           <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Completado →</label><select id="pick-done" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
           <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">En garantía →</label><select id="pick-warranty" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
+          <div style="display:flex;align-items:center;gap:8px;"><label style="font-size:12px;color:#5f5e5a;width:120px;">Descartado →</label><select id="pick-cancelled" style="font-size:12px;padding:4px;border-radius:6px;border:0.5px solid #b4b2a9;flex:1">${opts}</select></div>
         </div>
         <div style="font-size:11px;color:#888780;margin-bottom:14px;">Encontrados: ${states.join(' · ')}</div>
         <div class="modal-actions"><button class="hbtn" onclick="document.getElementById('modal-area').innerHTML=''">Cancelar</button><button class="hbtn primary" onclick="applyPickedStates()">Aplicar</button></div>
@@ -3169,6 +3224,7 @@ async function fetchWIStates(){
     trySelect('pick-clienttest',['test','testing','qa','uat','client','delivered']);
     trySelect('pick-done',['done','complet','resolv','completado','closed']);
     trySelect('pick-warranty',['warranty','garant']);
+    trySelect('pick-cancelled',['cancel','removed','descart','discard','rejected','abandon']);
   }catch(err){showToast('Error: '+err.message,'error');}
 }
 
@@ -3182,6 +3238,7 @@ function applyPickedStates(){
   proj.devops.stPruebasCliente=document.getElementById('pick-clienttest')?.value||proj.devops.stPruebasCliente;
   proj.devops.stCompletado=document.getElementById('pick-done')?.value||proj.devops.stCompletado||proj.devops.stTerminado;
   proj.devops.stEnGarantia=document.getElementById('pick-warranty')?.value||proj.devops.stEnGarantia;
+  proj.devops.stDescartadoCliente=document.getElementById('pick-cancelled')?.value||proj.devops.stDescartadoCliente;
   document.getElementById('modal-area').innerHTML='';
   saveState();render();showToast('✓ Estados aplicados','success');
 }
@@ -3359,11 +3416,11 @@ async function exportPDF(){
           const col=gc(t.adev?.pi||0);const bg=t.estado==='completado'?'#16A34A':col.bar,fg=t.estado==='completado'?'#ffffff':col.text;
       
 
-          const estBg=t.estado==='nuevo'?'#e6f1fb':t.estado==='aprobado'?'#f1efe8':t.estado==='completado'?'#9fe1cb':t.estado==='en_desarrollo'?'#b5d4f4':t.estado==='resolviendo_incidencias'?'#faeeda':t.estado==='pausa_cliente'?'#faeeda':t.estado==='pruebas_cliente'?'#E8E3FF':t.estado==='en_garantia'?'#E3F6EE':'#f1efe8';
-          const estCl=t.estado==='nuevo'?'#0c447c':t.estado==='aprobado'?'#5f5e5a':t.estado==='completado'?'#085041':t.estado==='en_desarrollo'?'#0c447c':t.estado==='resolviendo_incidencias'?'#b25500':t.estado==='pausa_cliente'?'#633806':t.estado==='pruebas_cliente'?'#4A3B8F':t.estado==='en_garantia'?'#176B4D':'#5f5e5a';
+          const estBg=t.estado==='nuevo'?'#e6f1fb':t.estado==='aprobado'?'#f1efe8':t.estado==='completado'?'#9fe1cb':t.estado==='en_desarrollo'?'#b5d4f4':t.estado==='resolviendo_incidencias'?'#faeeda':t.estado==='pausa_cliente'?'#faeeda':t.estado==='pruebas_cliente'?'#E8E3FF':t.estado==='en_garantia'?'#E3F6EE':t.estado==='descartado_cliente'?'#e8e5df':'#f1efe8';
+          const estCl=t.estado==='nuevo'?'#0c447c':t.estado==='aprobado'?'#5f5e5a':t.estado==='completado'?'#085041':t.estado==='en_desarrollo'?'#0c447c':t.estado==='resolviendo_incidencias'?'#b25500':t.estado==='pausa_cliente'?'#633806':t.estado==='pruebas_cliente'?'#4A3B8F':t.estado==='en_garantia'?'#176B4D':t.estado==='descartado_cliente'?'#5f0a0a':'#5f5e5a';
           const rowBg=i%2===0?'#fff':'#fafaf8';
           return `<tr style="opacity:${t.estado==='completado'?'0.6':'1'}">
-            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};"><span style="background:${estBg};color:${estCl};font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;">${t.estado==='nuevo'?'Nuevo':t.estado==='aprobado'?'Aprobado':t.estado==='en_desarrollo'?'En desarrollo':t.estado==='resolviendo_incidencias'?'Resolviendo incidencias':t.estado==='pausa_cliente'?'Pausado':t.estado==='pruebas_cliente'?'Probando':t.estado==='completado'?'Completado':t.estado==='en_garantia'?'En Garantía':'Aprobado'}</span></td>
+            <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};"><span style="background:${estBg};color:${estCl};font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;${t.estado==='descartado_cliente'?'text-decoration:line-through;':''}">${t.estado==='nuevo'?'Nuevo':t.estado==='aprobado'?'Aprobado':t.estado==='en_desarrollo'?'En desarrollo':t.estado==='resolviendo_incidencias'?'Resolviendo incidencias':t.estado==='pausa_cliente'?'Pausado':t.estado==='pruebas_cliente'?'Probando':t.estado==='completado'?'Completado':t.estado==='en_garantia'?'En Garantía':t.estado==='descartado_cliente'?'Descartado':'Aprobado'}</span>${t.estado==='descartado_cliente'&&t.motivoDescarte?`<div style="font-size:9px;color:#5f0a0a;margin-top:2px;font-style:italic;">${String(t.motivoDescarte).replace(/</g,'&lt;').slice(0,80)}</div>`:''}</td>
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};font-weight:500;white-space:nowrap;">${t.id}</td>
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};">${t.name}</td>
             <td style="padding:3px 7px;border:0.5px solid #d3d1c7;background:${rowBg};text-align:center;font-weight:500;">${t.pri}</td>
@@ -3421,7 +3478,7 @@ function exportExcel(){
     const visible=displaySortedTasks(sch).filter(t=>taskMatchesFilters(t,proj));
     if(!visible.length){alert('No hay tareas para exportar (revisa los filtros activos).');return;}
 
-    const estLabel={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'};
+    const estLabel={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía',descartado_cliente:'Descartado por cliente'};
     const hpd=proj.hpd||8;
 
     const rows=visible.map(t=>({
@@ -3442,6 +3499,8 @@ function exportExcel(){
       'Inicio':t.so||(t.start?iso(t.start):''),
       'Entrega a Pruebas':t.eoDev||'',
       'Fin':t.eo||t.eoPlan||(t.end?iso(t.end):''),
+      'Fecha descarte':t.fechaDescarte||'',
+      'Motivo descarte':t.motivoDescarte||'',
       'Dependencias':(t.deps||[]).join(', ')
     }));
 
@@ -3454,7 +3513,7 @@ function exportExcel(){
       {wch:14},{wch:14},{wch:34},{wch:5},
       {wch:7},{wch:7},{wch:9},{wch:9},{wch:6},
       {wch:9},{wch:14},{wch:18},{wch:11},{wch:11},
-      {wch:12},{wch:17},{wch:12},{wch:20}
+      {wch:12},{wch:17},{wch:12},{wch:12},{wch:40},{wch:20}
     ];
 
     const wb=XLSX.utils.book_new();
@@ -3554,7 +3613,7 @@ function exportAudit(){
   const btn=document.getElementById('btn-audit');
   if(btn)btn.disabled=true;
   try{
-    const estLabel={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía'};
+    const estLabel={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía',descartado_cliente:'Descartado por cliente'};
     const wb=XLSX.utils.book_new();
 
     // ── Hoja Resumen
@@ -3668,6 +3727,8 @@ function exportAudit(){
           'Plan (eoPlan)':eoPlan||'',
           'Fin Dev (eoDev)':eoDev||'',
           'Fin Real (eoReal)':eoReal||'',
+          'Fecha descarte':t.fechaDescarte||'',
+          'Motivo descarte':t.motivoDescarte||'',
           'Modo cálculo':mode,
           'Días háb. cal.':calDays,
           'Cal × hpd × avail':hoursCal,
@@ -3691,6 +3752,7 @@ function exportAudit(){
         {wch:6},{wch:6},{wch:8},{wch:12},
         {wch:9},{wch:9},{wch:10},{wch:10},
         {wch:12},{wch:12},{wch:12},{wch:12},
+        {wch:12},{wch:40},
         {wch:14},
         {wch:13},{wch:18},{wch:14},{wch:11},{wch:7},{wch:6},
         {wch:8},{wch:8},{wch:8},{wch:10},{wch:14},{wch:14},{wch:17}
