@@ -297,6 +297,10 @@ select.cs{font-size:12px;padding:2px 3px;border-radius:3px;border:0.5px solid #b
       <span class="sb-collapsed-hide">Importar</span>
       <input type="file" accept=".json" onchange="importJSON(event)" style="display:none">
     </label>
+    <div class="sb-bottom-btn" onclick="restoreLastLocalBackup()" title="Restaurar último snapshot automático de localStorage">
+      <span>⟲</span>
+      <span class="sb-collapsed-hide">Restaurar backup local</span>
+    </div>
   </div>
 </div>
 
@@ -332,6 +336,10 @@ select.cs{font-size:12px;padding:2px 3px;border-radius:3px;border:0.5px solid #b
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════
 const SK='ap_axo_v20_multiproj';
+const AUTOBK_KEY='ap_axo_autobackup_';
+const AUTOBK_MAX=10;      // conservar N snapshots rotativos
+const AUTOBK_MIN_MS=8000; // no descargar más de 1 archivo cada 8s (evita spam)
+let _lastAutoBkTs=0;
 const PAL=[
   {bar:'#378ADD',text:'#042C53'},{bar:'#1D9E75',text:'#04342C'},
   {bar:'#BA7517',text:'#412402'},{bar:'#D4537E',text:'#4B1528'},
@@ -494,6 +502,66 @@ function saveState(){
     catch(e){setSI('unsaved');}
   },400);
 }
+
+// ═══════════════════════════════════════════════════════════════
+// AUTO-BACKUP (rotating localStorage snapshots + download on state change)
+// ═══════════════════════════════════════════════════════════════
+function autoBackupState(reason){
+  try{
+    const payload=JSON.stringify(G);
+    // 1) Rotar snapshots en localStorage (mantenemos AUTOBK_MAX más recientes)
+    for(let i=AUTOBK_MAX-1;i>0;i--){
+      const prev=localStorage.getItem(AUTOBK_KEY+(i-1));
+      if(prev!==null)localStorage.setItem(AUTOBK_KEY+i,prev);
+      else localStorage.removeItem(AUTOBK_KEY+i);
+    }
+    localStorage.setItem(AUTOBK_KEY+0,payload);
+    localStorage.setItem(AUTOBK_KEY+'meta',JSON.stringify({
+      timestamp:new Date().toISOString(),
+      reason:reason||'estado',
+      size:payload.length
+    }));
+  }catch(e){console.warn('Snapshot local falló:',e);}
+
+  // 2) Descargar JSON a Downloads (throttled para no spamear)
+  const now=Date.now();
+  if(now-_lastAutoBkTs<AUTOBK_MIN_MS)return;
+  _lastAutoBkTs=now;
+  try{
+    const d=new Date();
+    const pad=n=>String(n).padStart(2,'0');
+    const stamp=`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const b=new Blob([JSON.stringify(G,null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b);
+    a.download=`AP-AXO-AutoBackup-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(a.href);},100);
+  }catch(e){console.warn('Auto-backup a Downloads falló:',e);}
+}
+
+function restoreLastLocalBackup(){
+  const meta=localStorage.getItem(AUTOBK_KEY+'meta');
+  const snap=localStorage.getItem(AUTOBK_KEY+0);
+  if(!snap){showToast('No hay backup local disponible','error');return;}
+  const m=meta?JSON.parse(meta):{};
+  showModal('Restaurar backup local',
+    `<p style="font-size:13px;">Restaurar snapshot del <b>${m.timestamp||'?'}</b> (${m.reason||'?'}) — ${Math.round((m.size||snap.length)/1024)}KB</p><p style="font-size:12px;color:#888780;margin-top:8px;">Se reemplazará el estado actual. Hay ${AUTOBK_MAX} snapshots rotativos disponibles.</p>`,
+    ()=>{
+      try{
+        const parsed=JSON.parse(snap);
+        G=parsed;
+        if(!G.projects||G.projects.length===0){showToast('Snapshot inválido','error');return;}
+        G.projects.forEach((p,i)=>sanitizeProject(p,i));
+        G.activeProjectId=G.projects[0].id;
+        saveState();renderSidebar();render();
+        showToast('Backup local restaurado','success');
+      }catch(e){showToast('Error al parsear: '+e.message,'error');}
+    }
+  );
+}
+window.restoreLastLocalBackup=restoreLastLocalBackup;
 
 function setSI(s){
   const el=document.getElementById('save-indicator');if(!el)return;
@@ -2592,6 +2660,9 @@ function setE(taskId,v){
   render();
   requestAnimationFrame(()=>applyRealBarPositions());
   if(pendingReworkPrompt) promptReworkHours(taskId);
+
+  // Auto-backup en cada cambio de estado
+  if(v!==prev)autoBackupState(`${taskId}: ${prev}→${v}`);
 }
 
 function promptDescarteMotivo(taskId,prevEstado){
@@ -2624,6 +2695,7 @@ function promptDescarteMotivo(taskId,prevEstado){
     saveState();
     if(proj.devops.autoSync&&t.wiId)syncWIState(taskId,'descartado_cliente');
     render();
+    autoBackupState(`${taskId}: descartado por cliente`);
     showToast('Tarea marcada como descartada por cliente','success');
   });
   setTimeout(()=>{
