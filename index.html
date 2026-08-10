@@ -448,6 +448,9 @@ function sanitizeProject(p,i){
   return p;
 }
 
+let _safeMode=false;      // si true, saveState NO escribe (protege data corrupta)
+let _dataLossDetected=false;
+
 function loadState(){
   let raw=null;
   try{raw=localStorage.getItem(SK);}catch(e){}
@@ -457,37 +460,68 @@ function loadState(){
       if(!raw)try{raw=localStorage.getItem(k);}catch(e){}
     });
   }
-  try{
-    if(raw){
-      const parsed=JSON.parse(raw);
-      // Old single-project format
-      if(!parsed.projects&&parsed.tasks){
-        const p=sanitizeProject({...JSON.parse(JSON.stringify(DEF_PROJECT)),...parsed,id:'proj_migrated',color:PROJ_COLORS[0]},0);
-        G={projects:[p],globalDevs:[],companyName:'AP-AXO',activeProjectId:p.id,sidebarCollapsed:false};
-      } else {
-        G=parsed;
-      }
-      if(!G||typeof G!=='object')throw new Error('Invalid state');
-      if(!Array.isArray(G.projects)||G.projects.length===0)G.projects=[mkProject('AP-AXO')];
-      if(!Array.isArray(G.globalDevs))G.globalDevs=[];
-      if(!G.companyName||typeof G.companyName!=='string')G.companyName='AP-AXO';
-      if(typeof G.sidebarCollapsed!=='boolean')G.sidebarCollapsed=false;
-      G.projects=G.projects.map((p,i)=>sanitizeProject(p,i));
-      G.globalDevs.forEach(d=>{
-        if(d.avail===undefined||d.avail===null)d.avail=100;
-        if(!d.id)d.id='gd'+Date.now();
-        if(!d.name)d.name='Dev';
-        if(d.active===undefined)d.active=true;
-      });
-      if(!G.projects.find(p=>p.id===G.activeProjectId))G.activeProjectId=G.projects[0].id;
-      return;
-    }
-  }catch(e){
-    console.warn('loadState failed, starting fresh:',e);
+
+  // CASO 1: No hay data (primera vez). Estado por defecto.
+  if(!raw){
+    G={projects:[mkProject('AP-AXO')],globalDevs:[],companyName:'AP-AXO',activeProjectId:'',sidebarCollapsed:false};
+    G.activeProjectId=G.projects[0].id;
+    return;
   }
-  G={projects:[mkProject('AP-AXO')],globalDevs:[],companyName:'AP-AXO',activeProjectId:'',sidebarCollapsed:false};
-  G.activeProjectId=G.projects[0].id;
+
+  // CASO 2: Hay raw. Intentar parse+sanitize.
+  try{
+    const parsed=JSON.parse(raw);
+    if(!parsed.projects&&parsed.tasks){
+      const p=sanitizeProject({...JSON.parse(JSON.stringify(DEF_PROJECT)),...parsed,id:'proj_migrated',color:PROJ_COLORS[0]},0);
+      G={projects:[p],globalDevs:[],companyName:'AP-AXO',activeProjectId:p.id,sidebarCollapsed:false};
+    }else{
+      G=parsed;
+    }
+    if(!G||typeof G!=='object')throw new Error('Invalid state structure');
+    if(!Array.isArray(G.projects)||G.projects.length===0)throw new Error('projects array empty or missing');
+    if(!Array.isArray(G.globalDevs))G.globalDevs=[];
+    if(!G.companyName||typeof G.companyName!=='string')G.companyName='AP-AXO';
+    if(typeof G.sidebarCollapsed!=='boolean')G.sidebarCollapsed=false;
+    G.projects=G.projects.map((p,i)=>sanitizeProject(p,i));
+    G.globalDevs.forEach(d=>{
+      if(d.avail===undefined||d.avail===null)d.avail=100;
+      if(!d.id)d.id='gd'+Date.now();
+      if(!d.name)d.name='Dev';
+      if(d.active===undefined)d.active=true;
+    });
+    if(!G.projects.find(p=>p.id===G.activeProjectId))G.activeProjectId=G.projects[0].id;
+    return;
+  }catch(e){
+    console.error('loadState FAILED:',e);
+    // ⚠ NO sobrescribimos data corrupta. Guardamos backup del raw + activamos modo seguro.
+    try{
+      const ts=new Date().toISOString().replace(/[:.]/g,'-');
+      localStorage.setItem('ap_axo_CORRUPT_'+ts,raw);
+    }catch(_){}
+    _safeMode=true;
+    _dataLossDetected=true;
+    _loadErrorMsg=e.message;
+    // Intentar recuperar desde el snapshot rotativo más reciente
+    try{
+      const snap=localStorage.getItem(AUTOBK_KEY+0);
+      if(snap){
+        const s=JSON.parse(snap);
+        if(s&&Array.isArray(s.projects)&&s.projects.length>0){
+          G=s;
+          G.projects=G.projects.map((p,i)=>sanitizeProject(p,i));
+          if(!G.projects.find(p=>p.id===G.activeProjectId))G.activeProjectId=G.projects[0].id;
+          _loadErrorMsg+=' → RECUPERADO desde snapshot local automático';
+          _safeMode=false; // recuperación exitosa
+          return;
+        }
+      }
+    }catch(_){}
+    // Último recurso: estado mínimo pero MARCAR como modo seguro (no se guardará)
+    G={projects:[mkProject('AP-AXO')],globalDevs:[],companyName:'AP-AXO',activeProjectId:'',sidebarCollapsed:false};
+    G.activeProjectId=G.projects[0].id;
+  }
 }
+let _loadErrorMsg='';
 
 function mkProject(name){
   const id='proj_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
@@ -496,10 +530,36 @@ function mkProject(name){
 }
 
 function saveState(){
+  // ⚠ Bloqueado si modo seguro (error de carga sin recuperar) — protege data en disco
+  if(_safeMode){
+    setSI('unsaved');
+    console.warn('saveState BLOQUEADO: modo seguro activo');
+    return;
+  }
+  // Validación mínima antes de escribir
+  if(!G||!Array.isArray(G.projects)||G.projects.length===0){
+    console.error('saveState BLOQUEADO: G inválido',G);
+    setSI('unsaved');
+    return;
+  }
   setSI('saving');clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{
-    try{localStorage.setItem(SK,JSON.stringify(G));setSI('saved');}
-    catch(e){setSI('unsaved');}
+    try{
+      const payload=JSON.stringify(G);
+      // Chequeo de sanidad: si el nuevo payload es drásticamente menor que el guardado,
+      // podría ser pérdida catastrófica. Pedir confirmación.
+      try{
+        const existing=localStorage.getItem(SK);
+        if(existing&&existing.length>2000&&payload.length<existing.length*0.4){
+          // Pérdida > 60% del tamaño → guardamos snapshot del "existing" antes de escribir
+          const ts=new Date().toISOString().replace(/[:.]/g,'-');
+          localStorage.setItem('ap_axo_shrink_'+ts,existing);
+          console.warn('saveState: reducción drástica detectada. Snapshot del previo guardado en ap_axo_shrink_'+ts);
+        }
+      }catch(_){}
+      localStorage.setItem(SK,payload);
+      setSI('saved');
+    }catch(e){setSI('unsaved');console.error('saveState error:',e);}
   },400);
 }
 
@@ -3924,6 +3984,29 @@ const sb=document.getElementById('sidebar');
 if(G.sidebarCollapsed){sb.classList.add('collapsed');const btn=sb.querySelector('.sb-toggle');if(btn)btn.textContent='▶';}
 renderSidebar();
 render();
+// Banner de alerta si hubo error al cargar
+if(_dataLossDetected){
+  setTimeout(()=>{
+    const modeText=_safeMode?'<b style="color:#c81a1a;">MODO SEGURO ACTIVO — los cambios NO se guardarán.</b>':'<b style="color:#176B4D;">Recuperado desde snapshot local.</b>';
+    const html=`<div id="data-loss-banner" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#fcebeb;border-bottom:2px solid #e24b4a;padding:12px 20px;font-size:13px;color:#5f0a0a;box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+      <div style="max-width:1400px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <span style="font-size:18px;">⚠️</span>
+        <div style="flex:1;min-width:280px;">
+          <div style="font-weight:700;">Error al cargar los datos</div>
+          <div style="font-size:12px;color:#7a2a2a;margin-top:2px;">${String(_loadErrorMsg||'?').replace(/</g,'&lt;')}</div>
+          <div style="font-size:12px;margin-top:4px;">${modeText}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button onclick="restoreLastLocalBackup()" style="padding:6px 12px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;cursor:pointer;font-size:12px;font-weight:600;">⟲ Restaurar snapshot local</button>
+          <label style="padding:6px 12px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;cursor:pointer;font-size:12px;font-weight:600;">↑ Importar JSON<input type="file" accept=".json" onchange="importJSON(event);document.getElementById('data-loss-banner')?.remove();" style="display:none"></label>
+          <button onclick="if(confirm('¿Confirmas que la data actual es correcta y quieres guardar los cambios que hagas?')){_safeMode=false;_dataLossDetected=false;document.getElementById('data-loss-banner')?.remove();showToast('Modo seguro desactivado','success');}" style="padding:6px 12px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;cursor:pointer;font-size:12px;font-weight:600;">✓ Continuar (desactivar modo seguro)</button>
+          <button onclick="document.getElementById('data-loss-banner')?.remove();" title="Ocultar (modo seguro sigue activo)" style="padding:6px 10px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;cursor:pointer;font-size:12px;">✕</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('afterbegin',html);
+  },100);
+}
 setTimeout(initPanels,50);
 window.addEventListener('resize',()=>{
   if(!viewingGlobalDevs)requestAnimationFrame(()=>applyRealBarPositions());
