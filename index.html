@@ -127,6 +127,8 @@ header{background:#fff;border-bottom:0.5px solid #d3d1c7;padding:10px 20px;displ
 .gantt-table-split{border-collapse:collapse;font-size:12px;width:max-content;color:#1a1a18;}
 .gantt-table-split th,.gantt-table-split td{padding:3px 6px;border-right:0.5px solid #d3d1c7;border-bottom:0.5px solid #d3d1c7;vertical-align:middle;white-space:nowrap;font-weight:600;color:#1a1a18;}
 .gantt-table-split th{background:#f1efe8;color:#1a1a18;font-weight:700;font-size:11px;}
+.col-resize-handle:hover{background:linear-gradient(to right,transparent 0%,transparent 40%,#378ADD 40%,#378ADD 60%,transparent 60%);}
+.col-resize-handle:active{background:linear-gradient(to right,transparent 0%,transparent 40%,#0c447c 40%,#0c447c 60%,transparent 60%);}
 .gantt-table-split tr:nth-child(even) td{background:#fafaf8;}
 .gantt-table-split .total-row td{font-weight:500;background:#f1efe8!important;}
 .gantt-table-split .add-row td{background:#fff!important;border-top:1.5px dashed #b4b2a9;}
@@ -405,6 +407,7 @@ function sanitizeProject(p,i){
     p.filters.dev=normalizeFilterField(p.filters.dev);
   }
   if(!p.globalDevOverrides||typeof p.globalDevOverrides!=='object')p.globalDevOverrides={};
+  if(!p.colWidths||typeof p.colWidths!=='object')p.colWidths={};
   p.devs.forEach(d=>{
     if(d.avail===undefined||d.avail===null)d.avail=100;
     if(d.global===undefined)d.global=false;
@@ -2080,6 +2083,57 @@ function clearFilters(){
 }
 
 // ═══════════════════════════════════════════════════════════════
+// COLUMN RESIZE — per-project persisted widths
+// ═══════════════════════════════════════════════════════════════
+function cw(key,fallback){
+  const p=activeProject();
+  if(!p.colWidths)p.colWidths={};
+  const v=Number(p.colWidths[key]);
+  return (v&&v>=20)?v:fallback;
+}
+
+function attachColResizers(){
+  const ths=document.querySelectorAll('.gantt-table-split thead tr:first-child th.resizable');
+  ths.forEach(th=>{
+    if(th.querySelector('.col-resize-handle'))return;
+    const handle=document.createElement('div');
+    handle.className='col-resize-handle';
+    handle.style.cssText='position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize;user-select:none;z-index:5;';
+    // el th necesita position:relative
+    const cs=getComputedStyle(th);
+    if(cs.position==='static')th.style.position='relative';
+    handle.addEventListener('mousedown',e=>{
+      e.preventDefault();e.stopPropagation();
+      const startX=e.clientX;
+      const startW=th.getBoundingClientRect().width;
+      const key=th.dataset.colkey;
+      const overlay=document.createElement('div');
+      overlay.style.cssText='position:fixed;inset:0;z-index:9998;cursor:col-resize;background:transparent;';
+      document.body.appendChild(overlay);
+      function onMove(ev){
+        const w=Math.max(30,startW+(ev.clientX-startX));
+        th.style.width=w+'px';
+        if(th.style.minWidth)th.style.minWidth=w+'px';
+      }
+      function onUp(){
+        overlay.remove();
+        document.removeEventListener('mousemove',onMove);
+        document.removeEventListener('mouseup',onUp);
+        const finalW=Math.round(th.getBoundingClientRect().width);
+        const p=activeProject();
+        if(!p.colWidths)p.colWidths={};
+        p.colWidths[key]=finalW;
+        saveState();
+        render();
+      }
+      document.addEventListener('mousemove',onMove);
+      document.addEventListener('mouseup',onUp);
+    });
+    th.appendChild(handle);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MAIN RENDER
 // ═══════════════════════════════════════════════════════════════
 function render(){
@@ -2335,23 +2389,23 @@ function render(){
   <div class="left-scroll-wrap">
   <table class="gantt-table-split">
     <thead><tr>
-      <th class="sk" style="width:108px;left:0px">Estado</th>
-      <th class="sk" style="width:88px;left:108px">ID</th>
-      <th style="min-width:138px">Nombre</th>
-      <th style="width:52px;text-align:center">P</th>
-      <th style="width:52px;text-align:center">H.Dev</th>
-      <th style="width:52px;text-align:center">H.Test</th>
-      <th style="width:52px;text-align:center">Gar.</th>
-      <th style="width:56px;text-align:center;background:#eef2fb;color:#0c447c" title="H.Gen = H.Dev+H.Test+Gar">H.Gen</th>
-      <th style="width:32px;text-align:center">Días</th>
-      <th style="width:72px;text-align:center">D.Ret.</th>
-      <th style="width:72px;text-align:center">D.Pru.</th>
-      <th style="width:128px">Dev</th>
-      <th style="width:118px">Inicio</th>
-      <th style="width:118px">Fin</th>
-      <th style="width:100px">Depende de</th>
-      <th style="width:90px">WI Cliente</th>
-      <th style="width:110px">Work Item</th>
+      <th class="sk resizable" data-colkey="estado" style="width:${cw('estado',108)}px;left:0px">Estado</th>
+      <th class="sk resizable" data-colkey="id" style="width:${cw('id',88)}px;left:${cw('estado',108)}px">ID</th>
+      <th class="resizable" data-colkey="name" style="min-width:${cw('name',138)}px;width:${cw('name',138)}px">Nombre</th>
+      <th class="resizable" data-colkey="p" style="width:${cw('p',52)}px;text-align:center">P</th>
+      <th class="resizable" data-colkey="hdev" style="width:${cw('hdev',52)}px;text-align:center">H.Dev</th>
+      <th class="resizable" data-colkey="htest" style="width:${cw('htest',52)}px;text-align:center">H.Test</th>
+      <th class="resizable" data-colkey="gar" style="width:${cw('gar',52)}px;text-align:center">Gar.</th>
+      <th class="resizable" data-colkey="hgen" style="width:${cw('hgen',56)}px;text-align:center;background:#eef2fb;color:#0c447c" title="H.Gen = H.Dev+H.Test+Gar">H.Gen</th>
+      <th class="resizable" data-colkey="dias" style="width:${cw('dias',32)}px;text-align:center">Días</th>
+      <th class="resizable" data-colkey="dret" style="width:${cw('dret',72)}px;text-align:center">D.Ret.</th>
+      <th class="resizable" data-colkey="dpru" style="width:${cw('dpru',72)}px;text-align:center">D.Pru.</th>
+      <th class="resizable" data-colkey="dev" style="width:${cw('dev',128)}px">Dev</th>
+      <th class="resizable" data-colkey="inicio" style="width:${cw('inicio',118)}px">Inicio</th>
+      <th class="resizable" data-colkey="fin" style="width:${cw('fin',118)}px">Fin</th>
+      <th class="resizable" data-colkey="deps" style="width:${cw('deps',100)}px">Depende de</th>
+      <th class="resizable" data-colkey="wicli" style="width:${cw('wicli',90)}px">WI Cliente</th>
+      <th class="resizable" data-colkey="wi" style="width:${cw('wi',110)}px">Work Item</th>
       <th class="col-action" style="width:28px"></th>
       <th style="width:${tcp}px;padding:0;vertical-align:top;border-left:1.5px solid #d3d1c7;">
         <table style="width:100%;border-collapse:collapse;font-size:10px;"><tr>
@@ -2371,7 +2425,7 @@ function render(){
       </tr>
       <tr>
         <th class="sk" style="left:0px"><button class="filter-btn" onclick="openFilterPopup(event,'estado')" title="Filtrar Estado">${filterButtonLabel('estado',proj)}</button></th>
-        <th class="sk" style="left:108px"><button class="filter-btn" onclick="openFilterPopup(event,'id')" title="Filtrar ID">${filterButtonLabel('id',proj)}</button></th>
+        <th class="sk" style="left:${cw('estado',108)}px"><button class="filter-btn" onclick="openFilterPopup(event,'id')" title="Filtrar ID">${filterButtonLabel('id',proj)}</button></th>
         <th><button class="filter-btn" onclick="openFilterPopup(event,'name')" title="Filtrar Nombre" style="max-width:128px;min-width:128px;">${filterButtonLabel('name',proj)}</button></th>
         <th></th><th></th><th></th><th></th><th></th><th></th>
         <th style="text-align:center;padding:2px 0;"><div style="display:inline-flex;gap:2px;justify-content:center;"><button onclick="bumpDelayDaysPausado(-1)" title="Restar 1 día de retención a TODAS las tareas en Pausado" style="width:22px;height:22px;font-size:14px;border-radius:4px;border:0.5px solid #b4b2a9;background:#f1efe8;cursor:pointer;font-weight:700;line-height:1;color:#5f5e5a;">−</button><button onclick="bumpDelayDaysPausado(1)" title="Sumar 1 día de retención a TODAS las tareas en Pausado" style="width:22px;height:22px;font-size:14px;border-radius:4px;border:0.5px solid #b4b2a9;background:#f1efe8;cursor:pointer;font-weight:700;line-height:1;color:#5f5e5a;">+</button></div></th>
@@ -2442,7 +2496,7 @@ function render(){
           <option value="descartado_cliente" ${t.estado==='descartado_cliente'?'selected':''}>Descartado por cliente</option>
         </select>
       </td>
-      <td class="sk" style="left:108px"><input class="ce" style="width:80px;font-weight:500" value="${t.id}" onchange="sfId('${t.id}',this.value)" ${vDis?'disabled':''}></td>
+      <td class="sk" style="left:${cw('estado',108)}px"><input class="ce" style="width:80px;font-weight:500" value="${t.id}" onchange="sfId('${t.id}',this.value)" ${vDis?'disabled':''}></td>
       <td><input class="ce" style="min-width:128px" value="${t.name}" onchange="sf('${t.id}','name',this.value)" ${vDis?'disabled':''}>${hOs||hOe?'<span class="ov-dot"></span>':''}${t.estado==='descartado_cliente'&&t.motivoDescarte?`<div style="font-size:9px;color:#7a2a2a;margin-top:2px;font-weight:600;cursor:help;" title="Motivo: ${String(t.motivoDescarte).replace(/"/g,'&quot;')}">✕ ${t.motivoDescarte.slice(0,42)}${t.motivoDescarte.length>42?'…':''}</div>`:''}</td>
       <td style="text-align:center"><input class="ce-pri" type="number" min="1" value="${t.pri}" onkeydown="priKeydown(event,'${t.id}')" onblur="priBlu(event,'${t.id}')" ${vDis?'disabled':''}></td>
       <td style="text-align:center"><input class="ce" style="width:48px;text-align:center" type="number" min="0" value="${t.hDev||0}" onchange="sfH('${t.id}','hDev',this.value)" ${vDis?'disabled':''}></td>
@@ -2551,7 +2605,7 @@ function render(){
   }
   h+=`<tr class="add-row">
     <td class="sk" style="left:0"></td>
-    <td class="sk" style="left:108px"><input id="ni" class="ce" placeholder="AP-AXO-XXX" style="width:80px"></td>
+    <td class="sk" style="left:${cw('estado',108)}px"><input id="ni" class="ce" placeholder="AP-AXO-XXX" style="width:80px"></td>
     <td><input id="nn" class="ce" placeholder="Nombre del desarrollo" style="min-width:128px"></td>
     <td style="text-align:center"><input id="np2" class="ce-pri" type="number" min="1" placeholder="${nP}" style="width:52px;text-align:center"></td>
     <td style="text-align:center"><input id="nh-dev" class="ce" type="number" placeholder="0" style="width:48px;text-align:center"></td>
@@ -2578,6 +2632,7 @@ function render(){
   document.getElementById('root').innerHTML=h;
   requestAnimationFrame(()=>applyRealBarPositions());
   if(openDrop){const el=document.getElementById(openDrop);if(el)el.classList.add('open');}
+  requestAnimationFrame(attachColResizers);
 
   }catch(err){
     console.error('render() error:',err);
