@@ -129,6 +129,19 @@ header{background:#fff;border-bottom:0.5px solid #d3d1c7;padding:10px 20px;displ
 .gantt-table-split th{background:#f1efe8;color:#1a1a18;font-weight:700;font-size:11px;}
 .col-resize-handle:hover{background:linear-gradient(to right,transparent 0%,transparent 40%,#378ADD 40%,#378ADD 60%,transparent 60%);}
 .col-resize-handle:active{background:linear-gradient(to right,transparent 0%,transparent 40%,#0c447c 40%,#0c447c 60%,transparent 60%);}
+/* Inputs y selects dentro de la tabla se ajustan al ancho de la columna */
+.gantt-table-split td input.ce,
+.gantt-table-split td input.ce-pri,
+.gantt-table-split td select.cs,
+.gantt-table-split td input[type=date],
+.gantt-table-split td input[type=number],
+.gantt-table-split td .dep-btn,
+.gantt-table-split td .estado-select{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+  box-sizing:border-box;
+}
 .gantt-table-split tr:nth-child(even) td{background:#fafaf8;}
 .gantt-table-split .total-row td{font-weight:500;background:#f1efe8!important;}
 .gantt-table-split .add-row td{background:#fff!important;border-top:1.5px dashed #b4b2a9;}
