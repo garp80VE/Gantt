@@ -688,7 +688,15 @@ function darkenColor(hex,factor=0.12){
 // Normalize date to midnight LOCAL time (prevents timezone 1-day offsets)
 function norm(d){const x=new Date(d);x.setHours(0,0,0,0);return x;}
 // Parse a YYYY-MM-DD string to midnight local (avoids UTC parsing offset)
-function parseDate(s){if(!s)return null;const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
+function parseDate(s){
+  if(!s)return null;
+  if(s instanceof Date)return isNaN(s.getTime())?null:new Date(s.getFullYear(),s.getMonth(),s.getDate());
+  if(typeof s!=='string')s=String(s);
+  if(!s.includes('-'))return null;
+  const[y,m,d]=s.split('-').map(Number);
+  if(isNaN(y)||isNaN(m)||isNaN(d))return null;
+  return new Date(y,m-1,d);
+}
 function holsIn(s,e){let d=new Date(s),c=0;while(d<=e){const w=d.getDay();if(w!==0&&w!==6&&HOL.has(iso(d)))c++;d.setDate(d.getDate()+1);}return c;}
 function wdInclusive(a,b){
   if(!a||!b)return 0;
@@ -2649,8 +2657,24 @@ function render(){
 
   }catch(err){
     console.error('render() error:',err);
+    // ⚠ ACTIVAR MODO SEGURO — el render falló pero la data en localStorage sigue intacta.
+    // Nunca ofrecer "reiniciar" desde aquí — sería catastrófico.
+    _safeMode=true;
     const root=document.getElementById('root');
-    if(root)root.innerHTML='<div style="padding:24px;color:#791f1f;background:#fcebeb;border-radius:8px;margin:16px;font-size:13px;"><strong>Error al cargar el proyecto.</strong><br>'+err.message+'<br><br><button onclick="forceReset()" style="margin-top:8px;padding:6px 14px;border-radius:6px;border:none;background:#1a1a18;color:#fff;cursor:pointer;font-size:12px;">Reiniciar datos</button></div>';
+    if(root)root.innerHTML=`<div style="padding:24px;color:#791f1f;background:#fcebeb;border:1px solid #e24b4a;border-radius:8px;margin:16px;font-size:13px;line-height:1.5;">
+      <strong style="font-size:15px;">⚠ Error al renderizar el proyecto</strong>
+      <div style="margin-top:6px;font-family:monospace;font-size:12px;background:#fff;padding:8px;border-radius:4px;">${String(err.message||err).replace(/</g,'&lt;')}</div>
+      <div style="margin-top:12px;color:#5f0a0a;"><b>Modo seguro activado</b> — tus datos siguen intactos en localStorage. Los cambios que hagas ahora NO se guardarán.</div>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="location.reload()" style="padding:8px 14px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;cursor:pointer;font-size:12px;font-weight:600;">🔄 Recargar página</button>
+        <button onclick="restoreLastLocalBackup()" style="padding:8px 14px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;cursor:pointer;font-size:12px;font-weight:600;">⟲ Restaurar snapshot local</button>
+        <label style="padding:8px 14px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;cursor:pointer;font-size:12px;font-weight:600;">↑ Importar backup JSON<input type="file" accept=".json" onchange="importJSON(event)" style="display:none"></label>
+        <button onclick="try{const b=new Blob([localStorage.getItem(SK)||''],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='EMERGENCIA-'+Date.now()+'.json';a.click();showToast('Backup de emergencia descargado','success');}catch(e){alert('Error: '+e.message);}" style="padding:8px 14px;border-radius:6px;border:0.5px solid #b4b2a9;background:#fff;cursor:pointer;font-size:12px;font-weight:600;">💾 Descargar backup de emergencia</button>
+      </div>
+      <div style="margin-top:14px;font-size:11px;color:#888780;">
+        <b>Reiniciar datos NO está disponible aquí</b> para prevenir pérdida accidental. Si necesitas reiniciar, usa el botón "Reiniciar" del header del proyecto solo después de haber descargado un backup.
+      </div>
+    </div>`;
   }
 }
 
@@ -2887,48 +2911,68 @@ function calcEo(so,total,dev,hpd,delayDays=0,testDays=0){
 
 function bumpTestDaysProbando(delta){
   const proj=activeProject();
-  let count=0;
+  let count=0, errors=[];
   proj.tasks.forEach(t=>{
     if(t.estado==='pruebas_cliente'){
       const cur=Math.max(0,parseInt(t.testDays)||0);
       const newVal=Math.max(0,cur+delta);
       if(newVal!==cur){
-        t.testDays=newVal;
-        recalcTaskPlanEnd(proj,t,t.id);
-        count++;
+        try{
+          t.testDays=newVal;
+          recalcTaskPlanEnd(proj,t,t.id);
+          count++;
+        }catch(e){
+          errors.push(`${t.id}: ${e.message}`);
+          t.testDays=cur; // revertir
+        }
       }
     }
   });
-  if(count===0){
+  if(count===0&&errors.length===0){
     showToast(delta<0?'No hay tareas en Probando con D.Pru. > 0':'No hay tareas en estado Probando','error');
     return;
   }
   saveState();
   render();
-  showToast(`${delta>0?'+':''}${delta} día D.Pru. en ${count} tarea${count===1?'':'s'} Probando`,'success');
+  if(errors.length){
+    showToast(`${count} actualizadas, ${errors.length} con error: ${errors[0]}`,'error');
+    console.error('Errores en bumpTestDaysProbando:',errors);
+  }else{
+    showToast(`${delta>0?'+':''}${delta} día D.Pru. en ${count} tarea${count===1?'':'s'} Probando`,'success');
+  }
 }
 
 function bumpDelayDaysPausado(delta){
   const proj=activeProject();
-  let count=0;
+  let count=0, errors=[];
   proj.tasks.forEach(t=>{
     if(t.estado==='pausa_cliente'){
       const cur=Math.max(0,parseInt(t.delayDays)||0);
       const newVal=Math.max(0,cur+delta);
       if(newVal!==cur){
-        t.delayDays=newVal;
-        recalcTaskPlanEnd(proj,t,t.id);
-        count++;
+        try{
+          t.delayDays=newVal;
+          recalcTaskPlanEnd(proj,t,t.id);
+          count++;
+        }catch(e){
+          errors.push(`${t.id}: ${e.message}`);
+          t.delayDays=cur; // revertir
+        }
       }
     }
   });
-  if(count===0){
+  if(count===0&&errors.length===0){
     showToast(delta<0?'No hay tareas en Pausado con D.Ret. > 0':'No hay tareas en estado Pausado','error');
     return;
   }
   saveState();
   render();
-  showToast(`${delta>0?'+':''}${delta} día D.Ret. en ${count} tarea${count===1?'':'s'} Pausado`,'success');
+  if(errors.length){
+    showToast(`${count} actualizadas, ${errors.length} con error: ${errors[0]}`,'error');
+    console.error('Errores en bumpDelayDaysPausado:',errors);
+  }else{
+    showToast(`${delta>0?'+':''}${delta} día D.Ret. en ${count} tarea${count===1?'':'s'} Pausado`,'success');
+  }
 }
 
 function recalcTaskPlanEnd(proj,t,changedTaskId=null){
