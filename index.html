@@ -2359,6 +2359,12 @@ function render(){
     <button class="dev-add-btn" onclick="showGlobalDevs()" style="border-color:#378ADD;color:#0c447c;">⚙ Gestionar desarrolladores</button>
   </div></div></div>
 
+  <div class="panel" style="margin-bottom:10px;">
+    <div class="panel-header" onclick="togglePanel('proj-panel-body')">
+      <div class="panel-title">📊 Panel del proyecto <span style="font-size:11px;color:#888780;font-weight:400;margin-left:6px;">— indicadores, devs y alertas</span></div>
+      <button class="collapse-btn" data-panel="proj-panel-body" onclick="event.stopPropagation();togglePanel('proj-panel-body')">▼ Mostrar</button>
+    </div>
+    <div class="panel-body collapsed" id="proj-panel-body">
   <div class="summary">
     <div class="sc"><div class="sc-label">Inicio</div><div class="sc-val" style="font-size:13px">${fmt(minD)}</div></div>
     <div class="sc"><div class="sc-label">Fin estimado</div><div class="sc-val" style="font-size:13px">${fmt(maxD)}</div></div>
@@ -2406,6 +2412,8 @@ function render(){
     ${devs.map(d=>'<span style="display:flex;align-items:center;gap:5px;'+(d.active===false?'opacity:0.4':'')+'">'+'<span style="width:10px;height:10px;border-radius:2px;background:'+gc(d.pi||0).bar+';display:inline-block;"></span>'+d.name+'</span>').join('')}
     <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:2px;background:#e24b4a;display:inline-block;"></span>Hoy</span>
     <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;background:#faeeda;border-radius:2px;display:inline-block;"></span>Feriado</span>
+  </div>
+    </div>
   </div>
   <div class="left-scroll-wrap">
   <table class="gantt-table-split">
