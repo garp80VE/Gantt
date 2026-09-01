@@ -1984,6 +1984,16 @@ function filterButtonLabel(field,proj){
   return vals.length+' seleccionados ▾';
 }
 
+// Estado de búsqueda por campo (se preserva mientras el popup está abierto)
+const _filterSearch={};
+
+function filterOptionMatches(label,searchTerms){
+  if(!searchTerms||!searchTerms.length)return true;
+  const l=String(label).toLowerCase();
+  // OR: match si alguno de los términos aparece como substring
+  return searchTerms.some(t=>l.includes(t));
+}
+
 function renderFilterPopupBody(field,proj){
   const popup=document.getElementById('filter-popup');
   if(!popup)return;
@@ -1991,15 +2001,33 @@ function renderFilterPopupBody(field,proj){
   const options=getFilterOptions(field,proj,sch);
   const selected=getFilterValues(proj,field);
   const allMode=selected.length===0;
-  let html='<label style="border-bottom:0.5px solid #eee;margin-bottom:2px;padding-bottom:4px;display:flex;align-items:center;gap:7px;font-weight:500;"><input type="checkbox" '+(allMode?'checked':'')+' data-action="all" data-field="'+field+'"> todos</label>';
+  const estadoMap={nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía',descartado_cliente:'Descartado por cliente'};
+  const searchRaw=_filterSearch[field]||'';
+  const terms=searchRaw.toLowerCase().split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);
+
+  let html='';
+  // Input de búsqueda persistente arriba
+  html+='<div style="padding:2px 2px 5px;border-bottom:0.5px solid #eee;margin-bottom:2px;position:sticky;top:0;background:#fff;z-index:5;">';
+  html+='<input type="text" id="filter-search-input" data-field="'+field+'" placeholder="Buscar… (separá con espacio o coma)" value="'+String(searchRaw).replace(/"/g,'&quot;')+'" style="width:100%;font-size:11px;padding:4px 6px;border:0.5px solid #b4b2a9;border-radius:4px;box-sizing:border-box;">';
+  html+='</div>';
+  // "todos" siempre visible (no filtrado)
+  html+='<label style="border-bottom:0.5px solid #eee;margin-bottom:2px;padding-bottom:4px;display:flex;align-items:center;gap:7px;font-weight:500;"><input type="checkbox" '+(allMode?'checked':'')+' data-action="all" data-field="'+field+'"> todos</label>';
+
   if(!options.length){
     html+='<div class="filter-empty">Sin opciones</div>';
   }else{
+    let visibleCount=0;
     options.forEach(opt=>{
+      const label=field==='estado'?(estadoMap[opt]||opt):opt;
+      // Match contra label visible O contra el valor raw (útil para estado)
+      if(!filterOptionMatches(label,terms)&&!filterOptionMatches(opt,terms))return;
+      visibleCount++;
       const checked=(allMode||selected.includes(opt))?'checked':'';
-      const label=field==='estado'?({nuevo:'Nuevo',aprobado:'Aprobado',en_desarrollo:'En desarrollo',resolviendo_incidencias:'Resolviendo incidencias',pausa_cliente:'Pausado',pruebas_cliente:'Probando',completado:'Completado',en_garantia:'En Garantía',descartado_cliente:'Descartado por cliente'}[opt]||opt):opt;
       html+='<label><input type="checkbox" '+checked+' data-action="toggle" data-field="'+field+'" data-value="'+String(opt).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"> '+label+'</label>';
     });
+    if(visibleCount===0){
+      html+='<div class="filter-empty" style="color:#888780;font-size:11px;padding:6px;text-align:center;">Sin coincidencias</div>';
+    }
   }
   popup.innerHTML=html;
   popup.querySelectorAll('input[type=checkbox]').forEach(cb=>{
@@ -2009,6 +2037,23 @@ function renderFilterPopupBody(field,proj){
       else toggleFilterValue(f,this.dataset.value,this.checked);
     });
   });
+  const inp=document.getElementById('filter-search-input');
+  if(inp){
+    inp.addEventListener('input',function(){
+      _filterSearch[this.dataset.field]=this.value;
+      renderFilterPopupBody(this.dataset.field,proj);
+      // Refoco el input y coloco cursor al final
+      setTimeout(()=>{
+        const ni=document.getElementById('filter-search-input');
+        if(ni){ni.focus();ni.setSelectionRange(ni.value.length,ni.value.length);}
+      },0);
+    });
+    // Enfocar al abrir por primera vez
+    if(!popup.dataset.searchFocused){
+      popup.dataset.searchFocused='1';
+      setTimeout(()=>inp.focus(),30);
+    }
+  }
 }
 
 function openFilterPopup(e,field){
@@ -2020,10 +2065,12 @@ function openFilterPopup(e,field){
   if(popup.dataset.field===field&&popup.style.display==='block'){
     popup.style.display='none';
     popup.dataset.field='';
+    popup.dataset.searchFocused='';
     return;
   }
 
   popup.dataset.field=field;
+  popup.dataset.searchFocused='';
   renderFilterPopupBody(field,proj);
 
   const r=e.currentTarget.getBoundingClientRect();
@@ -4136,7 +4183,7 @@ document.addEventListener('click',e=>{
   const dep=document.getElementById('dep-popup');
   const filter=document.getElementById('filter-popup');
   if(dep&&!dep.contains(e.target)&&!e.target.closest('.dep-btn')){dep.style.display='none';dep.dataset.task='';}
-  if(filter&&!filter.contains(e.target)&&!e.target.closest('.filter-btn')){filter.style.display='none';filter.dataset.field='';}
+  if(filter&&!filter.contains(e.target)&&!e.target.closest('.filter-btn')){filter.style.display='none';filter.dataset.field='';filter.dataset.searchFocused='';}
 });
 </script>
 <div id="dep-popup" class="dep-popup"></div>
