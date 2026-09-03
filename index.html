@@ -1046,8 +1046,11 @@ function sched(proj){
   });
 
   // df[devId] = next free date
+  // Piso: max(globalStart, HOY). Si globalStart está en el pasado, el dev arranca desde hoy hábil.
+  const todayWD=nxWD(new Date(TODAY));
+  const floor=gs>todayWD?new Date(gs):new Date(todayWD);
   const df={};
-  devs.forEach(d=>df[d.id]=new Date(gs));
+  devs.forEach(d=>df[d.id]=new Date(floor));
 
   // Cross-project: el df arranca en max(globalStart, último fin del dev en OTROS proyectos)
   // Así una tarea nueva en este proyecto NO se solapa con compromisos vigentes ajenos.
@@ -1171,9 +1174,10 @@ function sched(proj){
 
   const res=[];
   for(const t of sortedTasks(proj)){
+    // Piso de depEnd: max(globalStart, HOY) — no arrancar tareas nuevas en el pasado
     const depEnd=t.deps.reduce((m,dep)=>{
       const d=fm[dep];return d&&d>m?d:m;
-    },new Date(gs));
+    },new Date(floor));
     const dn=daysNeeded(t);
 
     // ── LOCKED / HISTORICAL TASKS ─────────────────────────────────────
