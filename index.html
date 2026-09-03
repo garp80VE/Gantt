@@ -2211,6 +2211,12 @@ function attachColResizers(){
 function render(){
   if(viewingGlobalDevs){renderGlobalDevsView();return;}
   if(viewingTeamLoad){renderTeamLoadView();return;}
+  // Preservar scroll horizontal/vertical del contenedor de tabla
+  const _prevScroll=(()=>{
+    const w=document.querySelector('.left-scroll-wrap');
+    const c=document.getElementById('content-area');
+    return {sx:w?w.scrollLeft:0, sy:c?c.scrollTop:0, focusedTaskId:document.activeElement?.closest('tr')?.querySelector('input[value^="AXO"], input[value^="AP-"]')?.value||null, focusedField:document.activeElement?.getAttribute('onchange')||null};
+  })();
   try{
   const proj=activeProject();
   const{sch,df}=sched(proj);
@@ -2713,6 +2719,13 @@ function render(){
   requestAnimationFrame(()=>applyRealBarPositions());
   if(openDrop){const el=document.getElementById(openDrop);if(el)el.classList.add('open');}
   requestAnimationFrame(attachColResizers);
+  // Restaurar scroll horizontal/vertical
+  requestAnimationFrame(()=>{
+    const w=document.querySelector('.left-scroll-wrap');
+    if(w&&_prevScroll.sx)w.scrollLeft=_prevScroll.sx;
+    const c=document.getElementById('content-area');
+    if(c&&_prevScroll.sy)c.scrollTop=_prevScroll.sy;
+  });
 
   }catch(err){
     console.error('render() error:',err);
