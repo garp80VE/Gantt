@@ -1200,8 +1200,10 @@ function sched(proj){
     const effectivePool=pool.length>0?pool:(ad.length>0?ad:devs);
     let chosenDev,chosenStart,chosenEnd;
 
-    if(t._manualSo&&t.so){
+    if(t._manualSo&&t.so&&t.estado!=='nuevo'){
       // User set start date — force that date as the schedule base.
+      // EXCEPTO en estado 'nuevo': ahí la fecha siempre debe seguir a HOY
+      // (presupuesto no aprobado → cada día que pasa se corre).
       // Only adjust to the next valid workday and to hard blockers:
       // dependencies and locked tasks of the same dev.
       const assignedDev=t.pdi?dByI(t.pdi,proj):null;
@@ -1249,7 +1251,8 @@ function sched(proj){
       chosenDev=dByI(t.pdi,proj);
       const freeAt=new Date(Math.max(
         (df[chosenDev.id]||new Date(0)).getTime(),
-        depEnd.getTime()
+        depEnd.getTime(),
+        TODAY.getTime()
       ));
       chosenStart=nxWD(freeAt);
       chosenEnd=addWD(chosenStart,dn);
