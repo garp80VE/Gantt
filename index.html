@@ -447,6 +447,9 @@ function sanitizeProject(p,i){
     if(!Array.isArray(t.cycleEvents))t.cycleEvents=[];
     if(t.motivoDescarte===undefined||t.motivoDescarte===null)t.motivoDescarte='';
     if(t.fechaDescarte===undefined)t.fechaDescarte=null;
+    // reopenLog: historial de reaperturas post-cierre (bug producción, incidencia post-garantía, etc.)
+    // Cada entry: {startedAt, motivo, horas, closedAt}
+    if(!Array.isArray(t.reopenLog))t.reopenLog=[];
     if(t.estado==='terminado')t.estado='completado';
     if(t.estado==='pausado')t.estado='pausa_cliente';
     if(t.estado==='pendiente')t.estado='aprobado';
@@ -2616,10 +2619,18 @@ function render(){
         const histLines=events.map(c=>{
           if(c.tipo==='devolución')return `↩ Devolución ${c.fecha}`;
           if(c.tipo==='reentrega')return `↪ Re-entrega ${c.fecha} (${c.horas||0}h)`;
+          if(c.tipo==='reapertura-produccion')return `⟳ Reapertura post-prod ${c.fecha}`;
+          if(c.tipo==='cierre-reapertura')return `✔ Cierre reapertura ${c.fecha}`;
           return '';
         }).filter(Boolean).join('\n');
         const tip=histLines||'Sin ciclos de retrabajo';
         const rwkBadge=rwk>0?`<div style="font-size:9px;color:#9C2A2A;text-align:center;margin-top:2px;cursor:help;" title="${tip}">↻ ${rwk}h${ciclos>0?` · ${ciclos} ciclo${ciclos===1?'':'s'}`:''}</div>`:'';
+        // Badge de reaperturas
+        const reopens=Array.isArray(t.reopenLog)?t.reopenLog:[];
+        const reopActive=reopens.some(r=>!r.closedAt);
+        const reopHoras=reopens.reduce((s,r)=>s+(Number(r.horas)||0),0);
+        const reopTip=reopens.map((r,i)=>`#${i+1} ${r.startedAt}${r.closedAt?' → '+r.closedAt:' (activa)'} · ${r.horas||0}h${r.motivo?': '+r.motivo:''}`).join('\n')||'Sin reaperturas';
+        const reopBadge=reopens.length>0?`<div style="font-size:9px;color:${reopActive?'#c03030':'#7a4a00'};font-weight:600;text-align:center;margin-top:2px;cursor:help;background:${reopActive?'#fdecec':'#fbf5e5'};border-radius:3px;padding:1px 3px;" title="${reopTip.replace(/"/g,'&quot;')}">⟳ ${reopens.length} reap${reopens.length===1?'':'.'} · ${reopHoras}h${reopActive?' (activa)':''}</div>`:'';
         // Dual input only for completed tasks (real close already happened)
         if(t.estado==='completado'){
           const devVal=t.eoDev||'';
@@ -2627,7 +2638,7 @@ function render(){
           return `<div style="display:flex;flex-direction:column;gap:2px;">
             <input type="date" class="ce" style="width:108px;font-size:11px" value="${devVal}" onchange="sf('${t.id}','eoDev',this.value||null)" title="Fin Dev (entrega del desarrollador)">
             <input type="date" class="ce ${hOe?'ov':''}" style="width:108px;font-size:11px" value="${realVal}" onchange="sf('${t.id}','eo',this.value||null)" title="Fin Real (cierre cliente)">
-          </div>${rwkBadge}`;
+          </div>${rwkBadge}${reopBadge}`;
         }
         // Para Probando / Garantía: input editable de Fin Dev (arriba) + Plan (abajo)
         if(t.estado==='pruebas_cliente'||t.estado==='en_garantia'){
@@ -2635,9 +2646,9 @@ function render(){
           return `<div style="display:flex;flex-direction:column;gap:2px;">
             <input type="date" class="ce" style="width:108px;font-size:11px${devVal?'':';border-color:#ba7517;background:#fdf6e9'}" value="${devVal}" onchange="sf('${t.id}','eoDev',this.value||null)" title="Fin Dev (entrega del desarrollador)" placeholder="Fin Dev">
             <input type="date" class="ce ${hOe?'ov':''}" style="width:108px;font-size:11px" value="${eoDisplay}" onchange="sf('${t.id}','eo',this.value||null)" ${eDis?'disabled':''} title="Plan / Fin estimado">
-          </div>${rwkBadge}`;
+          </div>${rwkBadge}${reopBadge}`;
         }
-        return `<input type="date" class="ce ${hOe?'ov':''}" style="width:108px" value="${eoDisplay}" onchange="sf('${t.id}','eo',this.value||null)" ${eDis?'disabled':''}>${rwkBadge}`;
+        return `<input type="date" class="ce ${hOe?'ov':''}" style="width:108px" value="${eoDisplay}" onchange="sf('${t.id}','eo',this.value||null)" ${eDis?'disabled':''}>${rwkBadge}${reopBadge}`;
       })()}</td>
       ${dd}
       <td><input class="ce" style="width:72px;text-align:center" maxlength="9" inputmode="numeric" placeholder="S/N" value="${t.wiCliente||''}" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,9)" onchange="sf('${t.id}','wiCliente',this.value)"></td>
@@ -2678,10 +2689,25 @@ function render(){
               +(_delayPct>0?'<div class="gantt-seg gantt-delay-seg" style="left:'+(_devPct+_testPct+_garPct)+'%;width:'+_delayPct+'%;background:'+_delayColor+'"></div>':'')
               +(_testDaysPct>0?'<div class="gantt-seg gantt-delay-seg" style="left:'+(_devPct+_testPct+_garPct+_delayPct)+'%;width:'+_testDaysPct+'%;background:'+_testDaysColor+'"></div>':'')
               +'</div>';
-            return '<div class="gantt-range gantt-bar" data-start="'+_startForBar+'" data-end="'+_endForBar+'" style="left:0px;width:0px;opacity:'+_op+';--dev-color:'+_bc+';">'
+            // Bar principal (ciclo original)
+            let _barsHtml='<div class="gantt-range gantt-bar" data-start="'+_startForBar+'" data-end="'+_endForBar+'" style="left:0px;width:0px;opacity:'+_op+';--dev-color:'+_bc+';">'
               +_trackHtml
               +'<span class="gantt-bar-label">'+(t.estado==='completado'?'✔ ':'')+t.id+'</span>'
               +'</div>';
+            // Bars adicionales por cada reapertura post-cierre
+            const _reopens=Array.isArray(t.reopenLog)?t.reopenLog:[];
+            _reopens.forEach((rp,ridx)=>{
+              if(!rp.startedAt)return;
+              const _reopEnd=rp.closedAt||iso(TODAY);
+              const _reopColor=darkenColor(_bc,0.30);
+              const _reopTitle=`Reapertura #${ridx+1}${rp.motivo?': '+rp.motivo:''} · ${rp.horas||0}h estimadas · ${rp.startedAt} → ${_reopEnd}${rp.closedAt?'':' (activa)'}`;
+              const _reopLabel=rp.closedAt?'↻ '+t.id:'↻ '+t.id+' (activa)';
+              _barsHtml+='<div class="gantt-range gantt-bar" data-start="'+rp.startedAt+'" data-end="'+_reopEnd+'" style="left:0px;width:0px;opacity:'+_op+';--dev-color:'+_reopColor+';border-left:4px solid '+_reopColor+';" title="'+_reopTitle.replace(/"/g,'&quot;')+'">'
+                +'<div class="gantt-bar-track" style="background:'+_reopColor+';"></div>'
+                +'<span class="gantt-bar-label">'+_reopLabel+'</span>'
+                +'</div>';
+            });
+            return _barsHtml;
           })()}
         </div>
       </td>
@@ -2881,12 +2907,35 @@ function setE(taskId,v){
     pendingReworkPrompt=true;
   }
 
+  // ─── Detección de REAPERTURA post-cierre ─────────────────────────
+  // Si venía de completado y ahora está activa de nuevo (resolviendo/garantía/desarrollo/probando)
+  let pendingReopenPrompt=false;
+  if(prev==='completado' && (v==='resolviendo_incidencias'||v==='en_garantia'||v==='en_desarrollo'||v==='pruebas_cliente')){
+    if(!Array.isArray(t.reopenLog))t.reopenLog=[];
+    // Push placeholder abierto; horas/motivo se piden en modal
+    t.reopenLog.push({startedAt:iso(TODAY),motivo:'',horas:0,closedAt:null});
+    if(!Array.isArray(t.cycleEvents))t.cycleEvents=[];
+    t.cycleEvents.push({tipo:'reapertura-produccion',fecha:iso(TODAY)});
+    pendingReopenPrompt=true;
+  }
+
+  // ─── Detección de CIERRE de una reapertura ───────────────────────
+  // Si tiene una reapertura activa y ahora vuelve a completado
+  if(v==='completado' && Array.isArray(t.reopenLog) && t.reopenLog.length){
+    const last=t.reopenLog[t.reopenLog.length-1];
+    if(last&&!last.closedAt){
+      last.closedAt=iso(TODAY);
+      t.cycleEvents.push({tipo:'cierre-reapertura',fecha:iso(TODAY)});
+    }
+  }
+
   saveState();
   if(proj.devops.autoSync&&t.wiId&&v!==prev)syncWIState(taskId,v);
 
   render();
   requestAnimationFrame(()=>applyRealBarPositions());
   if(pendingReworkPrompt) promptReworkHours(taskId);
+  if(pendingReopenPrompt) promptReopenMotivo(taskId);
 
   // Auto-backup en cada cambio de estado
   if(v!==prev)autoBackupState(`${taskId}: ${prev}→${v}`);
@@ -2927,6 +2976,48 @@ function promptDescarteMotivo(taskId,prevEstado){
   });
   setTimeout(()=>{
     const ta=document.getElementById('descarte-motivo');
+    if(ta)ta.focus();
+  },50);
+}
+
+function promptReopenMotivo(taskId){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);
+  if(!t||!Array.isArray(t.reopenLog)||!t.reopenLog.length)return;
+  const last=t.reopenLog[t.reopenLog.length-1];
+  if(!last||last.closedAt)return;
+
+  const body=`
+    <p style="font-size:13px;margin-bottom:8px;">Esta tarea estaba <b>completada</b> y fue reabierta.</p>
+    <p style="font-size:12px;color:#888780;margin-bottom:10px;">Registrá el motivo y una estimación de horas para el fix. Se guardará como reapertura post-producción (no cambia las horas comprometidas ni el ciclo original).</p>
+    <label style="display:block;font-size:12px;margin-bottom:4px;font-weight:500;">Motivo:</label>
+    <textarea id="reopen-motivo" style="width:100%;min-height:70px;padding:6px 8px;font-size:13px;border:1px solid #b4b2a9;border-radius:6px;font-family:inherit;resize:vertical;box-sizing:border-box;" placeholder="Ej: Bug en cálculo de impuestos, se reportó en producción."></textarea>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;">
+      Horas estimadas del fix:
+      <input type="number" id="reopen-horas" value="0" min="0" step="1" style="width:80px;padding:5px 8px;font-size:14px;border:1px solid #b4b2a9;border-radius:4px;text-align:right;">
+    </label>
+    <p style="font-size:11px;color:#888780;margin-top:8px;">Reapertura registrada con fecha ${fmt(TODAY)}. Al cerrarla de nuevo, se guardará la fecha de cierre y el bar mostrará dos segmentos separados.</p>
+  `;
+  showModal('Reapertura post-producción',body,()=>{
+    const inpM=document.getElementById('reopen-motivo');
+    const inpH=document.getElementById('reopen-horas');
+    const motivo=String(inpM?.value||'').trim();
+    const horas=Math.max(0,parseFloat(inpH?.value)||0);
+    if(!motivo){
+      showToast('El motivo es obligatorio','error');
+      // Reabrimos el modal — dejamos el reopenLog abierto para no perder el estado
+      setTimeout(()=>promptReopenMotivo(taskId),100);
+      return;
+    }
+    last.motivo=motivo;
+    last.horas=horas;
+    saveState();
+    render();
+    const n=t.reopenLog.length;
+    showToast(`Reapertura #${n} registrada (${horas}h estimadas)`,'success');
+  });
+  setTimeout(()=>{
+    const ta=document.getElementById('reopen-motivo');
     if(ta)ta.focus();
   },50);
 }
@@ -4054,6 +4145,8 @@ function exportAudit(){
           'Disponibles (h)':hoursAvail,
           'Retrabajo (h)':rework,
           'Ciclos':Array.isArray(t.cycleEvents)?t.cycleEvents.filter(c=>c.tipo==='reentrega').length:0,
+          'Reaperturas':Array.isArray(t.reopenLog)?t.reopenLog.length:0,
+          'H.Reapertura':Array.isArray(t.reopenLog)?t.reopenLog.reduce((s,r)=>s+(Number(r.horas)||0),0):0,
           'ratio':typeof ratio==='number'?Number(ratio.toFixed(3)):ratio,
           'devUsed':devU,
           'testUsed':testU,
@@ -4073,7 +4166,7 @@ function exportAudit(){
         {wch:12},{wch:12},{wch:12},{wch:12},
         {wch:12},{wch:40},
         {wch:14},
-        {wch:13},{wch:18},{wch:14},{wch:11},{wch:7},{wch:6},
+        {wch:13},{wch:18},{wch:14},{wch:11},{wch:7},{wch:6},{wch:11},{wch:12},
         {wch:8},{wch:8},{wch:8},{wch:10},{wch:14},{wch:14},{wch:17}
       ];
       // Truncate sheet name to 31 chars (Excel limit) and remove invalid chars
@@ -4106,6 +4199,35 @@ function exportAudit(){
       const wsC=XLSX.utils.json_to_sheet(cycleRows);
       wsC['!cols']=[{wch:26},{wch:14},{wch:30},{wch:18},{wch:4},{wch:13},{wch:12},{wch:8}];
       XLSX.utils.book_append_sheet(wb,wsC,'Historial ciclos');
+    }
+
+    // ── Hoja Reaperturas (bugs post-producción con motivo detallado)
+    const reopenRows=[];
+    G.projects.forEach(p=>{
+      (p.tasks||[]).forEach(t=>{
+        const log=Array.isArray(t.reopenLog)?t.reopenLog:[];
+        if(!log.length)return;
+        const dev=dByI(t.pdi,p);
+        log.forEach((rp,idx)=>{
+          reopenRows.push({
+            'Proyecto':p.name,
+            'ID tarea':t.id,
+            'Nombre':t.name||'',
+            'Dev':dev?.name||'',
+            '#':idx+1,
+            'Fecha reapertura':rp.startedAt||'',
+            'Fecha cierre':rp.closedAt||'',
+            'Estado':rp.closedAt?'Cerrada':'Activa',
+            'Horas':Number(rp.horas)||0,
+            'Motivo':rp.motivo||''
+          });
+        });
+      });
+    });
+    if(reopenRows.length){
+      const wsR=XLSX.utils.json_to_sheet(reopenRows);
+      wsR['!cols']=[{wch:26},{wch:14},{wch:30},{wch:18},{wch:4},{wch:14},{wch:14},{wch:9},{wch:7},{wch:50}];
+      XLSX.utils.book_append_sheet(wb,wsR,'Reaperturas');
     }
 
     const d=new Date();
