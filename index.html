@@ -330,6 +330,7 @@ select.cs{font-size:12px;padding:2px 3px;border-radius:3px;border:0.5px solid #b
       <button class="hbtn primary" id="btn-pdf" onclick="exportPDF()">↓ PDF</button>
       <button class="hbtn primary" id="btn-xlsx" onclick="exportExcel()">↓ Excel</button>
       <button class="hbtn" id="btn-audit" onclick="exportAudit()">↓ Auditoría</button>
+      <button class="hbtn" id="btn-reopen" onclick="openReopenManager()" title="Reabrir/cerrar tareas post-cierre (bugs producción)">⟳ Reaperturas</button>
       <button class="hbtn" onclick="exportCurrentJSON()">↓ JSON</button>
       <button class="hbtn" onclick="renameCurrentProject()">✎ Renombrar</button>
       <button class="hbtn danger" onclick="confirmResetProject()">Reiniciar</button>
@@ -2230,6 +2231,18 @@ function render(){
   const filteredSch=displaySch.filter(t=>taskMatchesFilters(t,proj));
   const timelineSource=(filteredSch.length?filteredSch:displaySch);
   const allD=timelineSource.flatMap(t=>[t.start,t.end]).filter(Boolean);
+  // Extender el rango del calendario para incluir fechas de reaperturas post-cierre
+  // (así el segundo bar tiene celdas donde posicionarse)
+  timelineSource.forEach(t=>{
+    if(Array.isArray(t.reopenLog)){
+      t.reopenLog.forEach(rp=>{
+        if(rp.startedAt){const d=parseDate(rp.startedAt);if(d)allD.push(d);}
+        if(rp.closedAt){const d=parseDate(rp.closedAt);if(d)allD.push(d);}
+        // Si sigue abierta, incluir HOY como fin visible
+        if(!rp.closedAt&&rp.startedAt)allD.push(new Date(TODAY));
+      });
+    }
+  });
   const now=parseDate(proj.globalStart);
   const pad_placeholder=null;
   const minD=allD.length?new Date(Math.min(...allD.map(d=>d.getTime()))):now;
@@ -2978,6 +2991,81 @@ function promptDescarteMotivo(taskId,prevEstado){
     const ta=document.getElementById('descarte-motivo');
     if(ta)ta.focus();
   },50);
+}
+
+function openReopenManager(){
+  const proj=activeProject();
+  const tasks=proj.tasks||[];
+  const closedTasks=tasks.filter(t=>t.estado==='completado'||(Array.isArray(t.reopenLog)&&t.reopenLog.length&&t.reopenLog.some(r=>!r.closedAt)));
+  if(!closedTasks.length){
+    showToast('No hay tareas cerradas ni reaperturas activas en este proyecto','error');
+    return;
+  }
+  let body='<p style="font-size:13px;margin-bottom:10px;">Gestioná reaperturas manualmente. Útil cuando el trigger automático no capturó el cambio de estado.</p>';
+  body+='<div style="max-height:400px;overflow-y:auto;border:0.5px solid #d3d1c7;border-radius:6px;">';
+  body+='<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f1efe8;">'
+    +'<th style="text-align:left;padding:5px 8px;border-bottom:0.5px solid #d3d1c7;">ID</th>'
+    +'<th style="text-align:left;padding:5px 8px;border-bottom:0.5px solid #d3d1c7;">Nombre</th>'
+    +'<th style="text-align:center;padding:5px 8px;border-bottom:0.5px solid #d3d1c7;">Estado</th>'
+    +'<th style="text-align:center;padding:5px 8px;border-bottom:0.5px solid #d3d1c7;">Reap.</th>'
+    +'<th style="text-align:right;padding:5px 8px;border-bottom:0.5px solid #d3d1c7;">Acción</th>'
+    +'</tr></thead><tbody>';
+  closedTasks.forEach(t=>{
+    const log=Array.isArray(t.reopenLog)?t.reopenLog:[];
+    const activa=log.find(r=>!r.closedAt);
+    const cnt=log.length;
+    const estLabel={completado:'Completado',pruebas_cliente:'Probando',resolviendo_incidencias:'Resolviendo',en_garantia:'Garantía',en_desarrollo:'Desarrollo',pausa_cliente:'Pausado'}[t.estado]||t.estado;
+    let accion='';
+    if(activa){
+      accion=`<button class="hbtn" style="padding:3px 8px;font-size:11px;" onclick="closeReopenManually('${t.id}')">✔ Cerrar reap.</button>`;
+    }else if(t.estado==='completado'){
+      accion=`<button class="hbtn primary" style="padding:3px 8px;font-size:11px;" onclick="reopenTaskManually('${t.id}')">⟳ Reabrir</button>`;
+    }
+    body+=`<tr>
+      <td style="padding:5px 8px;border-bottom:0.5px solid #eee;font-weight:600;">${t.id}</td>
+      <td style="padding:5px 8px;border-bottom:0.5px solid #eee;">${(t.name||'').slice(0,50)}</td>
+      <td style="padding:5px 8px;border-bottom:0.5px solid #eee;text-align:center;">${estLabel}</td>
+      <td style="padding:5px 8px;border-bottom:0.5px solid #eee;text-align:center;color:${activa?'#c03030':'#5f5e5a'};font-weight:${activa?600:400};">${cnt}${activa?' (activa)':''}</td>
+      <td style="padding:5px 8px;border-bottom:0.5px solid #eee;text-align:right;">${accion}</td>
+    </tr>`;
+  });
+  body+='</tbody></table></div>';
+  showModal('Gestor de reaperturas',body,()=>{});
+}
+
+function reopenTaskManually(taskId){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);
+  if(!t){showToast('Tarea no encontrada','error');return;}
+  if(t.estado!=='completado'){showToast('Solo se pueden reabrir tareas completadas','error');return;}
+  // Cerrar modal actual
+  document.getElementById('modal-area').innerHTML='';
+  // Crear entry de reapertura y pedir motivo
+  if(!Array.isArray(t.reopenLog))t.reopenLog=[];
+  t.reopenLog.push({startedAt:iso(TODAY),motivo:'',horas:0,closedAt:null});
+  if(!Array.isArray(t.cycleEvents))t.cycleEvents=[];
+  t.cycleEvents.push({tipo:'reapertura-produccion',fecha:iso(TODAY)});
+  // Cambiar estado a resolviendo_incidencias por defecto
+  t.estado='resolviendo_incidencias';
+  saveState();
+  render();
+  promptReopenMotivo(taskId);
+}
+
+function closeReopenManually(taskId){
+  const proj=activeProject();
+  const t=proj.tasks.find(x=>x.id===taskId);
+  if(!t||!Array.isArray(t.reopenLog))return;
+  const activa=t.reopenLog.find(r=>!r.closedAt);
+  if(!activa){showToast('No hay reapertura activa','error');return;}
+  activa.closedAt=iso(TODAY);
+  if(!Array.isArray(t.cycleEvents))t.cycleEvents=[];
+  t.cycleEvents.push({tipo:'cierre-reapertura',fecha:iso(TODAY)});
+  t.estado='completado';
+  saveState();
+  document.getElementById('modal-area').innerHTML='';
+  render();
+  showToast(`Reapertura de ${taskId} cerrada`,'success');
 }
 
 function promptReopenMotivo(taskId){
