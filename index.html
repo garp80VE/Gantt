@@ -449,8 +449,14 @@ function sanitizeProject(p,i){
     if(t.motivoDescarte===undefined||t.motivoDescarte===null)t.motivoDescarte='';
     if(t.fechaDescarte===undefined)t.fechaDescarte=null;
     // reopenLog: historial de reaperturas post-cierre (bug producción, incidencia post-garantía, etc.)
-    // Cada entry: {startedAt, motivo, horas, closedAt}
+    // Cada entry: {startedAt, motivo, horas, testDays, delayDays, closedAt}
     if(!Array.isArray(t.reopenLog))t.reopenLog=[];
+    t.reopenLog.forEach(rp=>{
+      if(rp.testDays===undefined||rp.testDays===null||isNaN(rp.testDays))rp.testDays=0;
+      if(rp.delayDays===undefined||rp.delayDays===null||isNaN(rp.delayDays))rp.delayDays=0;
+      rp.testDays=Math.max(0,parseInt(rp.testDays)||0);
+      rp.delayDays=Math.max(0,parseInt(rp.delayDays)||0);
+    });
     if(t.estado==='terminado')t.estado='completado';
     if(t.estado==='pausado')t.estado='pausa_cliente';
     if(t.estado==='pendiente')t.estado='aprobado';
@@ -708,6 +714,13 @@ function wdInclusive(a,b){
   if(e<s)return isWD(s)?1:0;
   return wdB(s,e)+(isWD(s)?1:0);
 }
+// Devuelve la reapertura activa de una tarea (la última sin closedAt), o null
+function activeReopen(task){
+  if(!task||!Array.isArray(task.reopenLog)||!task.reopenLog.length)return null;
+  const last=task.reopenLog[task.reopenLog.length-1];
+  return (last&&!last.closedAt)?last:null;
+}
+
 function taskBaseHours(task){
   return ((task?.hDev)||0)+((task?.hTest)||0)+((task?.garantia)||0);
 }
@@ -2554,8 +2567,10 @@ function render(){
     const hOs=(t.so||t.start)&&canSo(t),hOe=(t.estado!=='completado')&&(t.eo||t.eoPlan||t.end);
     const projId=proj.id;
     const devAvail=t.adev?.avail??100;
-    const delayDays=Math.max(0,parseInt(t.delayDays)||0);
-    const testDays=Math.max(0,parseInt(t.testDays)||0);
+    // Si hay reapertura activa, mostramos sus días en los inputs D.Ret/D.Pru
+    const _ar=activeReopen(t);
+    const delayDays=_ar?Math.max(0,parseInt(_ar.delayDays)||0):Math.max(0,parseInt(t.delayDays)||0);
+    const testDays=_ar?Math.max(0,parseInt(_ar.testDays)||0):Math.max(0,parseInt(t.testDays)||0);
     const baseDays=Math.ceil(taskBaseHours(t)/(proj.hpd||8));
     const availAffected=(t.estado==='nuevo'||t.estado==='aprobado')&&devAvail<100;
     const daysTip=availAffected?`title="Base: ${baseDays}d + retraso ${delayDays}d + pruebas ${testDays}d"`:'';
@@ -2621,8 +2636,8 @@ function render(){
         return `<div style="font-size:9px;font-weight:500;color:${savColor};margin-top:1px;" title="${tip}">${u.hoursReal}h ${arrow}${Math.abs(sav)}</div>`;
       })()}</td>
       <td style="text-align:center;color:${availAffected?'#ba7517':'#888780'}" ${daysTip}>${t.days}${availAffected?'<span style="font-size:9px;margin-left:1px;">⚡</span>':''}</td>
-      <td style="text-align:center"><input class="ce" type="number" min="0" style="width:56px;text-align:center" value="${delayDays}" onchange="sf('${t.id}','delayDays',this.value)" ${sDis?'disabled':''}></td>
-      <td style="text-align:center"><input class="ce" type="number" min="0" style="width:56px;text-align:center" value="${testDays}" onchange="sf('${t.id}','testDays',this.value)" ${sDis?'disabled':''}></td>
+      <td style="text-align:center"><input class="ce" type="number" min="0" style="width:56px;text-align:center${_ar?';border-color:#c03030;background:#fdecec;color:#5f0a0a':''}" value="${delayDays}" onchange="sf('${t.id}','delayDays',this.value)" ${sDis?'disabled':''} title="${_ar?'Afecta la reapertura activa (no al ciclo original)':''}"></td>
+      <td style="text-align:center"><input class="ce" type="number" min="0" style="width:56px;text-align:center${_ar?';border-color:#c03030;background:#fdecec;color:#5f0a0a':''}" value="${testDays}" onchange="sf('${t.id}','testDays',this.value)" ${sDis?'disabled':''} title="${_ar?'Afecta la reapertura activa (no al ciclo original)':''}"></td>
       <td><select class="cs dev-select" data-taskid="${t.id}" ${devDis?'disabled':''}>${dOpts}</select></td>
       <td><input type="date" class="ce ${hOs?'ov':''}" style="width:108px" value="${t.so||iso(t.start)}" onchange="sf('${t.id}','so',this.value||null)" ${sDis?'disabled':''}></td>
       <td>${(()=>{
@@ -2713,10 +2728,26 @@ function render(){
               if(!rp.startedAt)return;
               const _reopEnd=rp.closedAt||iso(TODAY);
               const _reopColor=darkenColor(_bc,0.30);
-              const _reopTitle=`Reapertura #${ridx+1}${rp.motivo?': '+rp.motivo:''} · ${rp.horas||0}h estimadas · ${rp.startedAt} → ${_reopEnd}${rp.closedAt?'':' (activa)'}`;
+              const _rpDelayDays=Math.max(0,parseInt(rp.delayDays)||0);
+              const _rpTestDays=Math.max(0,parseInt(rp.testDays)||0);
+              const _rpHoras=Math.max(0,Number(rp.horas)||0);
+              const _rpHpd=proj.hpd||8;
+              const _rpTotal=Math.max(1,_rpHoras+_rpDelayDays*_rpHpd+_rpTestDays*_rpHpd);
+              const _rpFixPct=(_rpHoras/_rpTotal)*100;
+              const _rpDelayPct=(_rpDelayDays*_rpHpd/_rpTotal)*100;
+              const _rpTestPct=(_rpTestDays*_rpHpd/_rpTotal)*100;
+              const _rpFixColor=_reopColor;
+              const _rpDelayColor=lightenColor(_reopColor,0.38);
+              const _rpTestColor=lightenColor(_reopColor,0.20);
+              const _reopTitle=`Reapertura #${ridx+1}${rp.motivo?': '+rp.motivo:''} · ${_rpHoras}h fix${_rpDelayDays>0?' · '+_rpDelayDays+'d retención':''}${_rpTestDays>0?' · '+_rpTestDays+'d pruebas':''} · ${rp.startedAt} → ${_reopEnd}${rp.closedAt?'':' (activa)'}`;
               const _reopLabel=rp.closedAt?'↻ '+t.id:'↻ '+t.id+' (activa)';
+              let _rpTrack='<div class="gantt-bar-track" style="background:transparent;">';
+              _rpTrack+='<div class="gantt-seg" style="left:0;width:'+_rpFixPct+'%;background:'+_rpFixColor+';"></div>';
+              if(_rpDelayPct>0)_rpTrack+='<div class="gantt-seg" style="left:'+_rpFixPct+'%;width:'+_rpDelayPct+'%;background:'+_rpDelayColor+';"></div>';
+              if(_rpTestPct>0)_rpTrack+='<div class="gantt-seg" style="left:'+(_rpFixPct+_rpDelayPct)+'%;width:'+_rpTestPct+'%;background:'+_rpTestColor+';"></div>';
+              _rpTrack+='</div>';
               _barsHtml+='<div class="gantt-range gantt-bar" data-start="'+rp.startedAt+'" data-end="'+_reopEnd+'" style="left:0px;width:0px;opacity:'+_op+';--dev-color:'+_reopColor+';border-left:4px solid '+_reopColor+';" title="'+_reopTitle.replace(/"/g,'&quot;')+'">'
-                +'<div class="gantt-bar-track" style="background:'+_reopColor+';"></div>'
+                +_rpTrack
                 +'<span class="gantt-bar-label">'+_reopLabel+'</span>'
                 +'</div>';
             });
@@ -2926,7 +2957,7 @@ function setE(taskId,v){
   if(prev==='completado' && (v==='resolviendo_incidencias'||v==='en_garantia'||v==='en_desarrollo'||v==='pruebas_cliente')){
     if(!Array.isArray(t.reopenLog))t.reopenLog=[];
     // Push placeholder abierto; horas/motivo se piden en modal
-    t.reopenLog.push({startedAt:iso(TODAY),motivo:'',horas:0,closedAt:null});
+    t.reopenLog.push({startedAt:iso(TODAY),motivo:'',horas:0,delayDays:0,testDays:0,closedAt:null});
     if(!Array.isArray(t.cycleEvents))t.cycleEvents=[];
     t.cycleEvents.push({tipo:'reapertura-produccion',fecha:iso(TODAY)});
     pendingReopenPrompt=true;
@@ -3165,19 +3196,30 @@ function calcEo(so,total,dev,hpd,delayDays=0,testDays=0){
 
 function bumpTestDaysProbando(delta){
   const proj=activeProject();
-  let count=0, errors=[];
+  let count=0, errors=[], toReap=0;
   proj.tasks.forEach(t=>{
     if(t.estado==='pruebas_cliente'){
-      const cur=Math.max(0,parseInt(t.testDays)||0);
-      const newVal=Math.max(0,cur+delta);
-      if(newVal!==cur){
-        try{
-          t.testDays=newVal;
-          recalcTaskPlanEnd(proj,t,t.id);
-          count++;
-        }catch(e){
-          errors.push(`${t.id}: ${e.message}`);
-          t.testDays=cur; // revertir
+      const ar=activeReopen(t);
+      if(ar){
+        // Si hay reapertura activa, el +/- aplica a ella, no al ciclo original
+        const cur=Math.max(0,parseInt(ar.testDays)||0);
+        const newVal=Math.max(0,cur+delta);
+        if(newVal!==cur){
+          ar.testDays=newVal;
+          count++;toReap++;
+        }
+      }else{
+        const cur=Math.max(0,parseInt(t.testDays)||0);
+        const newVal=Math.max(0,cur+delta);
+        if(newVal!==cur){
+          try{
+            t.testDays=newVal;
+            recalcTaskPlanEnd(proj,t,t.id);
+            count++;
+          }catch(e){
+            errors.push(`${t.id}: ${e.message}`);
+            t.testDays=cur;
+          }
         }
       }
     }
@@ -3192,25 +3234,36 @@ function bumpTestDaysProbando(delta){
     showToast(`${count} actualizadas, ${errors.length} con error: ${errors[0]}`,'error');
     console.error('Errores en bumpTestDaysProbando:',errors);
   }else{
-    showToast(`${delta>0?'+':''}${delta} día D.Pru. en ${count} tarea${count===1?'':'s'} Probando`,'success');
+    const reapNote=toReap>0?` (${toReap} a reapertura activa)`:'';
+    showToast(`${delta>0?'+':''}${delta} día D.Pru. en ${count} tarea${count===1?'':'s'} Probando${reapNote}`,'success');
   }
 }
 
 function bumpDelayDaysPausado(delta){
   const proj=activeProject();
-  let count=0, errors=[];
+  let count=0, errors=[], toReap=0;
   proj.tasks.forEach(t=>{
     if(t.estado==='pausa_cliente'){
-      const cur=Math.max(0,parseInt(t.delayDays)||0);
-      const newVal=Math.max(0,cur+delta);
-      if(newVal!==cur){
-        try{
-          t.delayDays=newVal;
-          recalcTaskPlanEnd(proj,t,t.id);
-          count++;
-        }catch(e){
-          errors.push(`${t.id}: ${e.message}`);
-          t.delayDays=cur; // revertir
+      const ar=activeReopen(t);
+      if(ar){
+        const cur=Math.max(0,parseInt(ar.delayDays)||0);
+        const newVal=Math.max(0,cur+delta);
+        if(newVal!==cur){
+          ar.delayDays=newVal;
+          count++;toReap++;
+        }
+      }else{
+        const cur=Math.max(0,parseInt(t.delayDays)||0);
+        const newVal=Math.max(0,cur+delta);
+        if(newVal!==cur){
+          try{
+            t.delayDays=newVal;
+            recalcTaskPlanEnd(proj,t,t.id);
+            count++;
+          }catch(e){
+            errors.push(`${t.id}: ${e.message}`);
+            t.delayDays=cur;
+          }
         }
       }
     }
@@ -3225,7 +3278,8 @@ function bumpDelayDaysPausado(delta){
     showToast(`${count} actualizadas, ${errors.length} con error: ${errors[0]}`,'error');
     console.error('Errores en bumpDelayDaysPausado:',errors);
   }else{
-    showToast(`${delta>0?'+':''}${delta} día D.Ret. en ${count} tarea${count===1?'':'s'} Pausado`,'success');
+    const reapNote=toReap>0?` (${toReap} a reapertura activa)`:'';
+    showToast(`${delta>0?'+':''}${delta} día D.Ret. en ${count} tarea${count===1?'':'s'} Pausado${reapNote}`,'success');
   }
 }
 
@@ -3349,13 +3403,24 @@ function sf(taskId,field,value){
   }
 
   if(field==='delayDays'){
-    t.delayDays=Math.max(0,parseInt(value)||0);
-    recalcTaskPlanEnd(proj,t,taskId);
+    const ar=activeReopen(t);
+    if(ar){
+      // Si hay reapertura activa, los días van a ella (no al ciclo original ya cerrado)
+      ar.delayDays=Math.max(0,parseInt(value)||0);
+    }else{
+      t.delayDays=Math.max(0,parseInt(value)||0);
+      recalcTaskPlanEnd(proj,t,taskId);
+    }
   }
 
   if(field==='testDays'){
-    t.testDays=Math.max(0,parseInt(value)||0);
-    recalcTaskPlanEnd(proj,t,taskId);
+    const ar=activeReopen(t);
+    if(ar){
+      ar.testDays=Math.max(0,parseInt(value)||0);
+    }else{
+      t.testDays=Math.max(0,parseInt(value)||0);
+      recalcTaskPlanEnd(proj,t,taskId);
+    }
   }
 
   saveState();render();
@@ -4235,6 +4300,8 @@ function exportAudit(){
           'Ciclos':Array.isArray(t.cycleEvents)?t.cycleEvents.filter(c=>c.tipo==='reentrega').length:0,
           'Reaperturas':Array.isArray(t.reopenLog)?t.reopenLog.length:0,
           'H.Reapertura':Array.isArray(t.reopenLog)?t.reopenLog.reduce((s,r)=>s+(Number(r.horas)||0),0):0,
+          'D.Ret.Reap':Array.isArray(t.reopenLog)?t.reopenLog.reduce((s,r)=>s+(Number(r.delayDays)||0),0):0,
+          'D.Pru.Reap':Array.isArray(t.reopenLog)?t.reopenLog.reduce((s,r)=>s+(Number(r.testDays)||0),0):0,
           'ratio':typeof ratio==='number'?Number(ratio.toFixed(3)):ratio,
           'devUsed':devU,
           'testUsed':testU,
@@ -4254,7 +4321,7 @@ function exportAudit(){
         {wch:12},{wch:12},{wch:12},{wch:12},
         {wch:12},{wch:40},
         {wch:14},
-        {wch:13},{wch:18},{wch:14},{wch:11},{wch:7},{wch:6},{wch:11},{wch:12},
+        {wch:13},{wch:18},{wch:14},{wch:11},{wch:7},{wch:6},{wch:11},{wch:12},{wch:10},{wch:10},
         {wch:8},{wch:8},{wch:8},{wch:10},{wch:14},{wch:14},{wch:17}
       ];
       // Truncate sheet name to 31 chars (Excel limit) and remove invalid chars
@@ -4307,6 +4374,8 @@ function exportAudit(){
             'Fecha cierre':rp.closedAt||'',
             'Estado':rp.closedAt?'Cerrada':'Activa',
             'Horas':Number(rp.horas)||0,
+            'D.Ret':Number(rp.delayDays)||0,
+            'D.Pru':Number(rp.testDays)||0,
             'Motivo':rp.motivo||''
           });
         });
@@ -4314,7 +4383,7 @@ function exportAudit(){
     });
     if(reopenRows.length){
       const wsR=XLSX.utils.json_to_sheet(reopenRows);
-      wsR['!cols']=[{wch:26},{wch:14},{wch:30},{wch:18},{wch:4},{wch:14},{wch:14},{wch:9},{wch:7},{wch:50}];
+      wsR['!cols']=[{wch:26},{wch:14},{wch:30},{wch:18},{wch:4},{wch:14},{wch:14},{wch:9},{wch:7},{wch:7},{wch:7},{wch:50}];
       XLSX.utils.book_append_sheet(wb,wsR,'Reaperturas');
     }
 
