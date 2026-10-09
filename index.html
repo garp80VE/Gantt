@@ -3896,6 +3896,16 @@ async function exportPDF(){
     const{sch,df}=sched(proj);
     const pdfTasks=displaySortedTasks(sch).filter(t=>taskMatchesFilters(t,proj));
     const allD=pdfTasks.flatMap(t=>[t.start,t.end]);
+    // Extender rango para incluir reaperturas post-cierre
+    pdfTasks.forEach(t=>{
+      if(Array.isArray(t.reopenLog)){
+        t.reopenLog.forEach(rp=>{
+          if(rp.startedAt){const d=parseDate(rp.startedAt);if(d)allD.push(d);}
+          if(rp.closedAt){const d=parseDate(rp.closedAt);if(d)allD.push(d);}
+          if(!rp.closedAt&&rp.startedAt)allD.push(new Date(TODAY));
+        });
+      }
+    });
     if(!allD.length){overlay.classList.remove('active');btn.disabled=false;alert('No hay tareas para exportar (revisa los filtros activos).');return;}
     const visibleIds=new Set(pdfTasks.map(t=>t.id));
     const visibleTasks=proj.tasks.filter(t=>visibleIds.has(t.id));
@@ -4002,7 +4012,21 @@ async function exportPDF(){
                   if(!t.start||!t.end)return '';
                   const _lx=pxL(t.start,minD);
                   const _bw=pxW(t.start,t.end);
-                  return '<div style="position:absolute;top:3px;left:'+_lx+'px;width:'+_bw+'px;height:18px;border-radius:3px;background:'+bg+';display:flex;align-items:center;padding:0 4px;font-size:9px;font-weight:500;color:'+fg+';overflow:hidden;opacity:'+((t.estado==='nuevo'||t.estado==='aprobado')?0.78:1)+';">'+(t.days>4?t.id:'')+'</div>';
+                  let _html='<div style="position:absolute;top:3px;left:'+_lx+'px;width:'+_bw+'px;height:18px;border-radius:3px;background:'+bg+';display:flex;align-items:center;padding:0 4px;font-size:9px;font-weight:500;color:'+fg+';overflow:hidden;opacity:'+((t.estado==='nuevo'||t.estado==='aprobado')?0.78:1)+';">'+(t.days>4?t.id:'')+'</div>';
+                  // Reaperturas post-cierre: segundo bar en el PDF
+                  const _reops=Array.isArray(t.reopenLog)?t.reopenLog:[];
+                  _reops.forEach(rp=>{
+                    if(!rp.startedAt)return;
+                    const _rpStart=parseDate(rp.startedAt);
+                    const _rpEnd=parseDate(rp.closedAt||iso(TODAY));
+                    if(!_rpStart||!_rpEnd)return;
+                    const _rLx=pxL(_rpStart,minD);
+                    const _rBw=pxW(_rpStart,_rpEnd);
+                    const _rColor=darkenColor(bg,0.30);
+                    const _rLabel=rp.closedAt?'↻ '+t.id:'↻ '+t.id+' (act)';
+                    _html+='<div style="position:absolute;top:3px;left:'+_rLx+'px;width:'+_rBw+'px;height:18px;border-radius:3px;background:'+_rColor+';border-left:3px solid '+darkenColor(bg,0.50)+';display:flex;align-items:center;padding:0 4px;font-size:9px;font-weight:500;color:#fff;overflow:hidden;">'+_rLabel+'</div>';
+                  });
+                  return _html;
                 })()}
               </div>
             </td>
